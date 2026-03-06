@@ -1,7 +1,10 @@
 import axios from 'axios';
 
+const isDevelopment = import.meta.env.MODE === 'development';
+const baseURL = isDevelopment ? 'http://localhost:4010' : 'https://kria-server.onrender.com';
+
 const API = axios.create({
-    baseURL: 'http://localhost:4010', // Direct backend URL (no /api/v1/)
+    baseURL,
     withCredentials: true,
 });
 
