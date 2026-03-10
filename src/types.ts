@@ -39,6 +39,23 @@ export interface AuctionStatus {
         soldPrice: number;
         timestamp: string;
     };
+    liveBid: {
+        currentPrice: number;
+        highestBidderId: string;
+        highestBidderName: string;
+        bidHistory: { teamId: string; teamName: string; amount: number; timestamp: string }[];
+        tiedTeams: string[];
+        tieBreakerActive: boolean;
+        spinWinnerId: string | null;
+        spinStartedAt: string | null;
+    };
+    settings: {
+        minBidIncrement: number;
+        bidDurationSeconds: number;
+        hardLimit: number;
+    };
+    unsoldCount: number;
+    rotationCount: number;
 }
 
 export interface AuctionSoldLog {

@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useParams } from 'react-router-dom';
 import { auctionApi } from '../api/auction';
 import { AuctionStatus, Player, Team } from '../types';
+import SpinTheWheel from '../components/SpinTheWheel';
 
 // ============================================================================
 // CONFETTI COMPONENT
@@ -235,9 +236,22 @@ const AuctionDisplay: React.FC = () => {
                     </div>
                 </div>
 
-                {/* CENTER: PLAYER INFO */}
+                {/* CENTER: PLAYER INFO / TIE-BREAKER */}
                 <div className="w-4/12 flex flex-col justify-center z-10 pl-4">
-                    {player ? (
+                    {status.liveBid?.tieBreakerActive && status.liveBid?.tiedTeams && status.liveBid.tiedTeams.length >= 2 ? (
+                        <div className="animate-in fade-in zoom-in-95 duration-500">
+                            <SpinTheWheel
+                                tiedTeams={status.liveBid.tiedTeams.map(id => {
+                                    const t = teams.find(tm => tm._id === id);
+                                    return { id, name: t?.name || 'Unknown', color: t?.primaryColor || '#64748b' };
+                                })}
+                                hardLimit={status.settings?.hardLimit || 0}
+                                interactive={false}
+                                externalWinnerId={status.liveBid?.spinWinnerId}
+                                externalSpinStartedAt={status.liveBid?.spinStartedAt}
+                            />
+                        </div>
+                    ) : player ? (
                         <div className="space-y-6">
                             <div>
                                 <h2 className="text-6xl xl:text-7xl font-oswald font-black text-white uppercase leading-tight drop-shadow-xl tracking-tighter">
@@ -267,8 +281,65 @@ const AuctionDisplay: React.FC = () => {
                     )}
                 </div>
 
-                {/* RIGHT: SOLD LOG PANEL */}
+                {/* RIGHT: LIVE BID + BID HISTORY + SOLD LOG */}
                 <div className="w-3/12 bg-[#111] border-l border-white/10 flex flex-col relative">
+                    {/* LIVE BID */}
+                    {status.liveBid && (status.status === 'in_progress' || status.status === 'paused') && (
+                        <div className="px-5 py-4 border-b border-white/10 bg-gradient-to-r from-primary/5 to-transparent">
+                            <div className="text-gray-500 text-[10px] uppercase tracking-widest font-oswald mb-2">Current Bid</div>
+                            <div className="text-4xl font-mono font-black text-white mb-1">₹{(status.liveBid.currentPrice || 0).toLocaleString()}</div>
+                            {status.liveBid.highestBidderName && (
+                                <div className="text-sm text-gray-400">
+                                    by <span className="text-primary font-bold">{status.liveBid.highestBidderName}</span>
+                                </div>
+                            )}
+                            {status.settings?.hardLimit > 0 && (
+                                <div className="mt-2">
+                                    <div className="flex justify-between text-[9px] text-gray-600 mb-0.5">
+                                        <span>₹{player?.auctionData?.basePrice?.toLocaleString() || '0'}</span>
+                                        <span className="text-red-400">₹{status.settings.hardLimit.toLocaleString()}</span>
+                                    </div>
+                                    <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                                        <div className="h-full rounded-full transition-all duration-500"
+                                            style={{
+                                                width: `${Math.min(100, (status.liveBid.currentPrice / status.settings.hardLimit) * 100)}%`,
+                                                background: status.liveBid.currentPrice >= status.settings.hardLimit
+                                                    ? 'linear-gradient(90deg, #ef4444, #f59e0b)'
+                                                    : 'linear-gradient(90deg, #3b82f6, #8b5cf6)',
+                                            }} />
+                                    </div>
+                                </div>
+                            )}
+                            {(status.liveBid.tiedTeams?.length || 0) >= 2 && (
+                                <div className="mt-2 text-xs text-amber-400 font-bold animate-pulse">
+                                    ⚡ {status.liveBid.tiedTeams.length} teams in tie-breaker!
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* BID HISTORY */}
+                    {status.liveBid?.bidHistory && status.liveBid.bidHistory.length > 0 && (
+                        <div className="px-5 py-3 border-b border-white/10">
+                            <h3 className="font-oswald font-bold text-[10px] uppercase tracking-widest text-gray-500 mb-2">Bid History</h3>
+                            <div className="space-y-1 max-h-[160px] overflow-y-auto">
+                                {[...status.liveBid.bidHistory].reverse().map((bid, i) => {
+                                    const team = teams.find(t => t._id === bid.teamId);
+                                    return (
+                                        <div key={i} className={`flex items-center justify-between py-1.5 px-2 rounded-lg text-xs ${i === 0 ? 'bg-primary/10 border border-primary/20' : ''}`}>
+                                            <div className="flex items-center gap-1.5">
+                                                <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: team?.primaryColor || '#64748b' }} />
+                                                <span className={`font-semibold ${i === 0 ? 'text-primary' : 'text-gray-300'}`}>{bid.teamName}</span>
+                                            </div>
+                                            <span className={`font-mono font-bold ${i === 0 ? 'text-white' : 'text-gray-500'}`}>₹{bid.amount.toLocaleString()}</span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* SOLD LOG */}
                     <div className="px-5 py-4 border-b border-white/10">
                         <h3 className="font-oswald font-bold text-sm uppercase tracking-widest text-gray-400">Sold Players ({soldLog.length})</h3>
                     </div>

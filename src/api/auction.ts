@@ -1,11 +1,8 @@
 import API from './axios';
 import { AuctionStatus, Player, Team } from '../types';
 
-// All auction calls go through the shared API instance (uses `accessToken` from localStorage)
-// This is consistent with how all other organizer-protected routes are called.
-
 export const auctionApi = {
-    // Public polling endpoints (no auth needed, but token added automatically if present)
+    // Public polling endpoints
     getStatus: async (tournamentId: string, categoryId: string) => {
         const res = await API.get(`/auction/${tournamentId}/${categoryId}/status`);
         return res.data?.data?.data as {
@@ -23,11 +20,23 @@ export const auctionApi = {
     },
 
     // Protected organizer actions
-    start: (tournamentId: string, categoryId: string) =>
-        API.post('/auction/start', { tournamentId, categoryId }),
+    start: (tournamentId: string, categoryId: string, opts?: { bidIncrement?: number; hardLimit?: number }) =>
+        API.post('/auction/start', { tournamentId, categoryId, ...opts }),
 
     sell: (tournamentId: string, categoryId: string, teamId: string, soldPrice: number) =>
         API.post('/auction/sell', { tournamentId, categoryId, teamId, soldPrice }),
+
+    bid: (tournamentId: string, categoryId: string, teamId: string) =>
+        API.post('/auction/bid', { tournamentId, categoryId, teamId }),
+
+    startTieBreaker: (tournamentId: string, categoryId: string) =>
+        API.post('/auction/start-tie-breaker', { tournamentId, categoryId }),
+
+    triggerSpinWheel: (tournamentId: string, categoryId: string) =>
+        API.post('/auction/trigger-spin', { tournamentId, categoryId }),
+
+    resolveHardLimit: (tournamentId: string, categoryId: string, winnerTeamId: string) =>
+        API.post('/auction/resolve-hard-limit', { tournamentId, categoryId, winnerTeamId }),
 
     next: (tournamentId: string, categoryId: string) =>
         API.post('/auction/next', { tournamentId, categoryId }),
@@ -40,4 +49,7 @@ export const auctionApi = {
 
     pause: (tournamentId: string, categoryId: string) =>
         API.post('/auction/pause', { tournamentId, categoryId }),
+
+    end: (tournamentId: string, categoryId: string) =>
+        API.post('/auction/end', { tournamentId, categoryId }),
 };

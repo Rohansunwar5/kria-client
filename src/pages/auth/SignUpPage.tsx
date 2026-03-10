@@ -167,7 +167,7 @@ export default function SignUpPage() {
                 onBack={handleBack}
                 onNext={handleNext}
                 onClose={() => navigate('/')}
-                className="border-white/10 bg-black/50 text-black backdrop-blur-md"
+                className="border-white/10 bg-black/50  backdrop-blur-md"
                 nextButtonText={isLoading ? "Processing..." : (registrationStep === totalSteps ? "Create Account" : "Next Step")}
                 footerContent={
                     <p className="text-xs text-gray-500 mt-2">
@@ -191,10 +191,10 @@ export default function SignUpPage() {
 
                 {/* Step 1: Basic Info */}
                 {registrationStep === 1 && (
-                    <div className="space-y-4">
+                    <div className="space-y-4 text-white">
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
-                                <Label htmlFor="firstName">First Name</Label>
+                                <Label htmlFor="firstName" className="text-white">First Name</Label>
                                 <Input
                                     id="firstName"
                                     placeholder="John"
@@ -204,7 +204,7 @@ export default function SignUpPage() {
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="lastName">Last Name</Label>
+                                <Label htmlFor="lastName" className="text-white">Last Name</Label>
                                 <Input
                                     id="lastName"
                                     placeholder="Doe"
@@ -215,7 +215,7 @@ export default function SignUpPage() {
                             </div>
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="email">Email</Label>
+                            <Label htmlFor="email" className="text-white">Email</Label>
                             <Input
                                 id="email"
                                 type="email"
@@ -226,7 +226,7 @@ export default function SignUpPage() {
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="phone">Phone Number</Label>
+                            <Label htmlFor="phone" className="text-white">Phone Number</Label>
                             <Input
                                 id="phone"
                                 type="tel"
@@ -253,7 +253,7 @@ export default function SignUpPage() {
                         </div>
 
                         <div className="space-y-2 max-w-xs mx-auto">
-                            <Label htmlFor="otp">Enter OTP</Label>
+                            <Label htmlFor="otp" className="text-white">Enter OTP</Label>
                             <Input
                                 id="otp"
                                 placeholder="123456"
@@ -271,13 +271,13 @@ export default function SignUpPage() {
                 {registrationStep === 3 && (
                     <div className="space-y-4">
                         <Alert className="bg-primary/10 border-primary/20 text-primary">
-                            <AlertTriangle className="h-4 w-4" />
+                            <AlertTriangle className="h-4 w-4 text-white" />
                             <AlertDescription>
                                 Secure your account with a strong password.
                             </AlertDescription>
                         </Alert>
                         <div className="space-y-2">
-                            <Label htmlFor="pwd">Password</Label>
+                            <Label htmlFor="pwd" className="text-white">Password</Label>
                             <Input
                                 id="pwd"
                                 type="password"
@@ -287,7 +287,7 @@ export default function SignUpPage() {
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="confirmPassword">Confirm Password</Label>
+                            <Label htmlFor="confirmPassword" className="text-white">Confirm Password</Label>
                             <Input
                                 id="confirmPassword"
                                 type="password"
