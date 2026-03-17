@@ -44,7 +44,10 @@ export const PlayerNavigation = () => {
                         {user ? `${user.firstName}`.toUpperCase() : 'PROFILE'}
                     </span>
                     <div className="h-10 w-10 rounded-full border border-white/20 overflow-hidden bg-zinc-800 flex items-center justify-center group-hover:border-primary transition-colors text-white font-bold text-lg">
-                        {user ? user.firstName[0].toUpperCase() : 'U'}
+                        {user?.profileImage
+                            ? <img src={user.profileImage} alt="Profile" className="h-full w-full object-cover" />
+                            : (user ? user.firstName[0].toUpperCase() : 'U')
+                        }
                     </div>
                 </Link>
                 <button

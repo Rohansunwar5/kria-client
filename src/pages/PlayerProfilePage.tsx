@@ -1,13 +1,18 @@
-import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, UserPlus, Share2, Settings, CalendarCheck, Bookmark, FileText, Users, Newspaper, User, PlusCircle, Store, LogOut, Pencil, Save, Loader2, Trophy } from 'lucide-react';
+import React, { useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+    ArrowLeft, UserPlus, Share2, Settings, CalendarCheck, Bookmark, FileText,
+    Users, Newspaper, User, PlusCircle, Store, Pencil, Save, Loader2,
+    Trophy, Swords, Star, MapPin, TrendingUp, Award, IndianRupee, Camera,
+} from 'lucide-react';
 import HoverFooter from '@/components/HoverFooter';
 import { useAppDispatch, useAppSelector } from '../store/hooks';
-import { logout, updateProfile } from '../store/slices/authSlice';
-import { fetchMyRegistrations, withdrawRegistration } from '../store/slices/registrationSlice';
+import { logout, updateProfile, fetchPlayerStats, uploadPlayerProfileImage } from '../store/slices/authSlice';
+import { fetchMyRegistrations, withdrawRegistration, fetchPlayerTournamentHistory, TournamentHistoryEntry } from '../store/slices/registrationSlice';
 import { Badge } from '@/components/ui/badge';
 
-const DashboardCard = ({ icon: Icon, title, onClick }: { icon: any, title: string, onClick?: () => void }) => (
+// ─── Dashboard card ──────────────────────────────────────────────────────────
+const DashboardCard = ({ icon: Icon, title, onClick }: { icon: any; title: string; onClick?: () => void }) => (
     <div
         onClick={onClick}
         className="group relative flex flex-col items-center justify-center gap-4 p-8 rounded-3xl bg-white/5 border border-white/10 cursor-pointer transition-all duration-300 hover:bg-white/10 hover:border-primary/50 hover:-translate-y-1 hover:shadow-xl hover:shadow-primary/10 overflow-hidden aspect-square"
@@ -18,30 +23,92 @@ const DashboardCard = ({ icon: Icon, title, onClick }: { icon: any, title: strin
     </div>
 );
 
+// ─── Skill badge ─────────────────────────────────────────────────────────────
+const skillColor = (level?: string) => {
+    switch (level?.toLowerCase()) {
+        case 'beginner':     return 'text-blue-400  border-blue-400/30  bg-blue-400/10';
+        case 'intermediate': return 'text-amber-400 border-amber-400/30 bg-amber-400/10';
+        case 'advanced':     return 'text-primary   border-primary/30   bg-primary/10';
+        case 'professional': return 'text-purple-400 border-purple-400/30 bg-purple-400/10';
+        default:             return 'text-gray-400  border-gray-400/30  bg-gray-400/10';
+    }
+};
+
+// ─── Tournament status badge ──────────────────────────────────────────────────
+const tournamentStatusColor = (status: string) => {
+    switch (status) {
+        case 'completed':   return 'text-green-400 border-green-400/20 bg-green-400/10';
+        case 'ongoing':     return 'text-blue-400  border-blue-400/20  bg-blue-400/10';
+        case 'cancelled':   return 'text-red-400   border-red-400/20   bg-red-400/10';
+        default:            return 'text-yellow-400 border-yellow-400/20 bg-yellow-400/10';
+    }
+};
+
+// ─── Registration status badge ────────────────────────────────────────────────
+const regStatusColor = (status: string) => {
+    if (status === 'approved' || status === 'assigned') return 'text-emerald-400 border-emerald-400/20 bg-emerald-400/10';
+    if (status === 'auctioned')                          return 'text-primary border-primary/20 bg-primary/10';
+    if (status === 'rejected' || status === 'withdrawn') return 'text-red-400 border-red-400/20 bg-red-400/10';
+    return 'text-yellow-400 border-yellow-400/20 bg-yellow-400/10';
+};
+
+// ─── Sport emoji ──────────────────────────────────────────────────────────────
+const sportEmoji = (sport?: string) => {
+    const map: Record<string, string> = { badminton: '🏸', cricket: '🏏', football: '⚽', tennis: '🎾', table_tennis: '🏓', kabaddi: '🤼' };
+    return sport ? (map[sport.toLowerCase()] ?? '🏅') : '🏅';
+};
+
+// ─── Stat chip ────────────────────────────────────────────────────────────────
+const StatChip = ({ icon: Icon, label, value, accent = false }: { icon: any; label: string; value: string | number; accent?: boolean }) => (
+    <div className="flex flex-col gap-1.5 p-4 rounded-2xl bg-white/5 border border-white/10">
+        <div className="flex items-center gap-2 text-gray-500">
+            <Icon className={`h-3.5 w-3.5 ${accent ? 'text-primary' : ''}`} />
+            <span className="text-xs uppercase tracking-wider font-oswald">{label}</span>
+        </div>
+        <span className={`text-xl font-bold font-oswald ${accent ? 'text-primary' : 'text-white'}`}>{value}</span>
+    </div>
+);
+
+// ─── Main Component ───────────────────────────────────────────────────────────
 const PlayerProfilePage = () => {
-    const navigate = useNavigate();
-    const dispatch = useAppDispatch();
-    const { user, role, isLoading } = useAppSelector((state) => state.auth);
-    const { myRegistrations, isLoading: isRegLoading } = useAppSelector((state) => state.registration);
+    const navigate  = useNavigate();
+    const dispatch  = useAppDispatch();
+    const { user, role, isLoading, playerStats, statsLoading } = useAppSelector(s => s.auth);
+    const { myRegistrations, isLoading: isRegLoading, tournamentHistory, historyLoading } = useAppSelector(s => s.registration);
 
     const [isEditing, setIsEditing] = useState(false);
-    const [editData, setEditData] = useState({ firstName: '', lastName: '', phone: '' });
-    const [activeView, setActiveView] = useState<'dashboard' | 'registrations'>('dashboard');
+    const [editData,  setEditData]  = useState({ firstName: '', lastName: '', phone: '', sport: '', location: '' });
+    const [activeView, setActiveView] = useState<'dashboard' | 'registrations' | 'history'>('dashboard');
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        await dispatch(uploadPlayerProfileImage(file));
+        // Reset input so same file can be re-selected if needed
+        e.target.value = '';
+    };
 
     React.useEffect(() => {
         dispatch(fetchMyRegistrations());
+        dispatch(fetchPlayerStats());
     }, [dispatch]);
 
-    const handleLogout = () => {
-        dispatch(logout());
-        navigate('/login');
-    };
+    React.useEffect(() => {
+        if (activeView === 'history' && tournamentHistory.length === 0) {
+            dispatch(fetchPlayerTournamentHistory());
+        }
+    }, [activeView, dispatch]);
+
+    const handleLogout = () => { dispatch(logout()); navigate('/login'); };
 
     const startEditing = () => {
         setEditData({
             firstName: user?.firstName || '',
-            lastName: user?.lastName || '',
-            phone: user?.phone || '',
+            lastName:  user?.lastName  || '',
+            phone:     user?.phone     || '',
+            sport:     user?.sport     || '',
+            location:  user?.location  || '',
         });
         setIsEditing(true);
     };
@@ -49,21 +116,19 @@ const PlayerProfilePage = () => {
     const handleSave = async () => {
         if (!role) return;
         const result = await dispatch(updateProfile({ role, data: editData }));
-        if (updateProfile.fulfilled.match(result)) {
-            setIsEditing(false);
-        }
+        if (updateProfile.fulfilled.match(result)) setIsEditing(false);
     };
 
     const handleWithdraw = async (id: string) => {
-        if (window.confirm('Are you sure you want to withdraw this registration?')) {
+        if (window.confirm('Are you sure you want to withdraw this registration?'))
             await dispatch(withdrawRegistration(id));
-        }
     };
+
+    // ── Computed stats from registrations (fast, no extra API) ────────────────
+    const activeRegs = myRegistrations.filter(r => !['withdrawn', 'rejected'].includes(r.status));
 
     return (
         <div className="min-h-screen bg-[#111] text-white font-montserrat flex flex-col items-center relative overflow-hidden">
-
-            {/* Background Decorative Elements */}
             <div className="absolute top-0 right-0 w-[800px] h-[800px] bg-primary/20 blur-[120px] rounded-full translate-x-1/3 -translate-y-1/3 pointer-events-none" />
             <div className="absolute bottom-0 left-0 w-[600px] h-[600px] bg-primary/10 blur-[100px] rounded-full -translate-x-1/3 translate-y-1/3 pointer-events-none" />
 
@@ -73,53 +138,85 @@ const PlayerProfilePage = () => {
                     onClick={() => navigate('/player/home')}
                     className="flex items-center gap-2 px-6 py-2 rounded-full bg-white/5 border border-white/10 hover:bg-primary/20 hover:border-primary hover:text-primary transition-all text-white font-medium"
                 >
-                    <ArrowLeft className="h-4 w-4" />
-                    Back
+                    <ArrowLeft className="h-4 w-4" /> Back
                 </button>
             </header>
 
-            {/* Main Content */}
-            <main className="w-full max-w-7xl px-8 mt-4 mb-24 grid grid-cols-1 lg:grid-cols-[380px_1fr] gap-12 z-10">
+            {/* Main grid */}
+            <main className="w-full max-w-7xl px-8 mt-4 mb-24 grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-10 z-10">
 
-                {/* Left Profile Card */}
+                {/* ── LEFT: Profile Card ────────────────────────────────────── */}
                 <div className="w-full bg-zinc-900/80 backdrop-blur-xl border border-white/10 rounded-[40px] p-8 flex flex-col shadow-2xl relative overflow-hidden h-fit">
-                    {/* Top utilities */}
                     <div className="flex items-center justify-between mb-8">
-                        <div className="flex items-center gap-4">
-                            <h2 className="text-2xl font-oswald font-bold tracking-widest text-white">PROFILE</h2>
-                        </div>
+                        <h2 className="text-2xl font-oswald font-bold tracking-widest text-white">PROFILE</h2>
                         <div className="flex gap-4 text-gray-400">
                             <UserPlus className="h-5 w-5 hover:text-white cursor-pointer transition-colors" />
-                            <Share2 className="h-5 w-5 hover:text-white cursor-pointer transition-colors" />
+                            <Share2  className="h-5 w-5 hover:text-white cursor-pointer transition-colors" />
                             <Settings className="h-5 w-5 hover:text-white cursor-pointer transition-colors" />
                         </div>
                     </div>
 
-                    {/* Avatar & Basic Info */}
+                    {/* Avatar + name */}
                     <div className="flex flex-col items-center gap-4 mb-8">
-                        <div className="h-28 w-28 rounded-full border-2 border-primary text-4xl text-white overflow-hidden bg-black p-1 flex items-center justify-center">
-                            <div className="h-full w-full rounded-full overflow-hidden bg-zinc-800 flex items-center justify-center font-bold">
-                                {user ? user.firstName[0].toUpperCase() : 'U'}
+                        {/* Hidden file input */}
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/png,image/jpg,image/jpeg,image/gif"
+                            className="hidden"
+                            onChange={handleImageUpload}
+                        />
+
+                        <div className="relative group">
+                            <div className="h-28 w-28 rounded-full border-2 border-primary bg-black flex items-center justify-center">
+                                <div className="h-full w-full rounded-full overflow-hidden bg-zinc-800 flex items-center justify-center font-bold text-4xl">
+                                    {user?.profileImage ? (
+                                        <img src={user.profileImage} alt="Profile" className="h-full w-full object-cover" />
+                                    ) : (
+                                        user ? user.firstName[0].toUpperCase() : 'U'
+                                    )}
+                                </div>
                             </div>
+
+                            {/* Camera upload overlay */}
+                            <button
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={isLoading}
+                                className="absolute inset-0 rounded-full bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer disabled:cursor-not-allowed"
+                                title="Change photo"
+                            >
+                                {isLoading ? (
+                                    <Loader2 className="h-6 w-6 text-white animate-spin" />
+                                ) : (
+                                    <Camera className="h-6 w-6 text-white" />
+                                )}
+                            </button>
+
+                            {/* Sport badge on avatar */}
+                            {user?.sport && (
+                                <div className="absolute -bottom-1 -right-1 w-8 h-8 rounded-full bg-zinc-800 border-2 border-zinc-700 flex items-center justify-center text-sm">
+                                    {sportEmoji(user.sport)}
+                                </div>
+                            )}
                         </div>
 
                         {isEditing ? (
-                            <div className="flex flex-col gap-3 w-full">
-                                <input
-                                    value={editData.firstName} onChange={e => setEditData(p => ({ ...p, firstName: e.target.value }))}
-                                    placeholder="First Name"
-                                    className="w-full px-4 py-2.5 rounded-full bg-black/50 border border-white/10 text-white text-center focus:outline-none focus:border-primary"
-                                />
-                                <input
-                                    value={editData.lastName} onChange={e => setEditData(p => ({ ...p, lastName: e.target.value }))}
-                                    placeholder="Last Name"
-                                    className="w-full px-4 py-2.5 rounded-full bg-black/50 border border-white/10 text-white text-center focus:outline-none focus:border-primary"
-                                />
-                                <input
-                                    value={editData.phone} onChange={e => setEditData(p => ({ ...p, phone: e.target.value }))}
-                                    placeholder="Phone"
-                                    className="w-full px-4 py-2.5 rounded-full bg-black/50 border border-white/10 text-white text-center focus:outline-none focus:border-primary"
-                                />
+                            <div className="flex flex-col gap-2.5 w-full">
+                                {[
+                                    { key: 'firstName', placeholder: 'First Name' },
+                                    { key: 'lastName',  placeholder: 'Last Name'  },
+                                    { key: 'phone',     placeholder: 'Phone'      },
+                                    { key: 'sport',     placeholder: 'Sport (e.g. Badminton)' },
+                                    { key: 'location',  placeholder: 'Location (e.g. Bangalore)' },
+                                ].map(({ key, placeholder }) => (
+                                    <input
+                                        key={key}
+                                        value={(editData as any)[key]}
+                                        onChange={e => setEditData(p => ({ ...p, [key]: e.target.value }))}
+                                        placeholder={placeholder}
+                                        className="w-full px-4 py-2.5 rounded-full bg-black/50 border border-white/10 text-white text-center focus:outline-none focus:border-primary text-sm"
+                                    />
+                                ))}
                             </div>
                         ) : (
                             <div className="text-center">
@@ -127,10 +224,15 @@ const PlayerProfilePage = () => {
                                     {user ? `${user.firstName} ${user.lastName}` : 'Player Name'}
                                 </h3>
                                 <p className="text-sm text-gray-400 mt-1">{user?.email}</p>
+                                {user?.location && (
+                                    <p className="text-xs text-gray-500 mt-1 flex items-center justify-center gap-1">
+                                        <MapPin className="h-3 w-3" /> {user.location}
+                                    </p>
+                                )}
                             </div>
                         )}
 
-                        <div className="flex flex-col gap-2 w-full mt-2">
+                        <div className="flex flex-col gap-2 w-full mt-1">
                             {isEditing ? (
                                 <div className="flex gap-2">
                                     <button onClick={() => setIsEditing(false)} className="flex-1 py-2 rounded-full border border-white/20 text-sm font-medium hover:bg-white/10 transition-colors">
@@ -151,80 +253,73 @@ const PlayerProfilePage = () => {
                         </div>
                     </div>
 
-                    <div className="h-px w-full bg-white/10 mb-8" />
+                    <div className="h-px w-full bg-white/10 mb-6" />
 
-                    {/* Stats List */}
-                    <div className="flex flex-col gap-6">
-                        <div className="flex flex-col gap-1">
-                            <span className="text-primary font-medium text-sm">Mobile</span>
-                            <div className="bg-white/5 border border-white/10 rounded-full px-5 py-3 text-white font-medium text-lg">
-                                {user?.phone || '+91 9999999999'}
-                            </div>
+                    {/* ── Dynamic stats grid ─────────────────────────────────── */}
+                    {statsLoading ? (
+                        <div className="flex justify-center py-4">
+                            <Loader2 className="h-5 w-5 text-primary animate-spin" />
                         </div>
-                        <div className="flex flex-col gap-1">
-                            <span className="text-primary font-medium text-sm">Sport</span>
-                            <div className="bg-white/5 border border-white/10 rounded-full px-5 py-3 text-white font-medium text-lg">
-                                Cricket
-                            </div>
+                    ) : (
+                        <div className="grid grid-cols-2 gap-3">
+                            <StatChip icon={Trophy}       label="Tournaments" value={playerStats?.totalTournaments ?? activeRegs.length} />
+                            <StatChip icon={Swords}        label="Matches"    value={playerStats?.totalMatchesPlayed ?? 0} />
+                            <StatChip icon={Star}          label="Wins"       value={playerStats?.totalMatchesWon ?? 0} />
+                            <StatChip icon={TrendingUp}    label="Points"     value={playerStats?.totalPointsContributed ?? 0} />
+                            {(playerStats?.highestBid ?? 0) > 0 && (
+                                <div className="col-span-2">
+                                    <StatChip icon={IndianRupee} label="Highest Bid" value={`₹${(playerStats?.highestBid ?? 0).toLocaleString()}`} accent />
+                                </div>
+                            )}
                         </div>
-                        <div className="flex flex-col gap-1">
-                            <span className="text-primary font-medium text-sm">Match Played</span>
-                            <div className="bg-white/5 border border-white/10 rounded-full px-5 py-3 text-white font-medium text-lg">
-                                40+
-                            </div>
-                        </div>
-                        <div className="flex flex-col gap-1">
-                            <span className="text-primary font-medium text-sm">Highest Score</span>
-                            <div className="bg-white/5 border border-white/10 rounded-full px-5 py-3 text-white font-medium text-lg">
-                                180
-                            </div>
-                        </div>
-                        <div className="flex flex-col gap-1">
-                            <span className="text-primary font-medium text-sm">Location</span>
-                            <div className="bg-white/5 border border-white/10 rounded-full px-5 py-3 text-white font-medium text-lg">
-                                Bangalore
-                            </div>
-                        </div>
+                    )}
+
+                    <div className="h-px w-full bg-white/10 my-6" />
+
+                    {/* ── Profile fields ────────────────────────────────────── */}
+                    <div className="flex flex-col gap-4">
+                        <StatField label="Mobile" value={user?.phone || '—'} />
+                        <StatField label="Sport"  value={user?.sport || '—'} />
+                        <StatField label="Location" value={user?.location || '—'} />
                     </div>
                 </div>
 
-                {/* Right Dashboard Area */}
+                {/* ── RIGHT: Tabs + Content ─────────────────────────────────── */}
                 <div className="w-full flex flex-col gap-6">
-                    {/* View Toggle / Tabs */}
-                    <div className="flex gap-4 p-1.5 bg-white/5 border border-white/10 rounded-2xl w-fit">
-                        <button
-                            onClick={() => setActiveView('dashboard')}
-                            className={`px-6 py-2.5 rounded-xl capitalize font-medium text-sm transition-all focus:outline-none ${activeView === 'dashboard'
-                                ? 'bg-white/10 text-white shadow-sm'
-                                : 'text-gray-400 hover:text-white hover:bg-white/5'
+                    {/* Tabs */}
+                    <div className="flex gap-2 p-1.5 bg-white/5 border border-white/10 rounded-2xl w-fit flex-wrap">
+                        {(['dashboard', 'registrations', 'history'] as const).map(tab => (
+                            <button
+                                key={tab}
+                                onClick={() => setActiveView(tab)}
+                                className={`px-5 py-2.5 rounded-xl capitalize font-medium text-sm transition-all focus:outline-none ${
+                                    activeView === tab
+                                        ? 'bg-white/10 text-white shadow-sm'
+                                        : 'text-gray-400 hover:text-white hover:bg-white/5'
                                 }`}
-                        >
-                            Dashboard
-                        </button>
-                        <button
-                            onClick={() => setActiveView('registrations')}
-                            className={`px-6 py-2.5 rounded-xl capitalize font-medium text-sm transition-all focus:outline-none ${activeView === 'registrations'
-                                ? 'bg-white/10 text-white shadow-sm'
-                                : 'text-gray-400 hover:text-white hover:bg-white/5'
-                                }`}
-                        >
-                            My Registrations
-                        </button>
+                            >
+                                {tab === 'history' ? 'Tournament History' : tab === 'registrations' ? 'My Registrations' : 'Dashboard'}
+                            </button>
+                        ))}
                     </div>
 
-                    {activeView === 'dashboard' ? (
-                        <div className="w-full grid grid-cols-2 md:grid-cols-3 gap-6 align-start content-start animate-in fade-in slide-in-from-bottom-4 duration-500">
-                            <DashboardCard icon={CalendarCheck} title="My Events" onClick={() => setActiveView('registrations')} />
-                            <DashboardCard icon={Bookmark} title="Saved" />
-                            <DashboardCard icon={FileText} title="Invoice" />
-                            <DashboardCard icon={Users} title="My Team" />
-                            <DashboardCard icon={UserPlus} title="Friends" />
-                            <DashboardCard icon={Newspaper} title="My News" />
-                            <DashboardCard icon={User} title="Profile" onClick={startEditing} />
-                            <DashboardCard icon={PlusCircle} title="Find Tournaments" onClick={() => navigate('/player/home')} />
-                            <DashboardCard icon={Store} title="Store" />
+                    {/* ── Dashboard ───────────────────────────────────────── */}
+                    {activeView === 'dashboard' && (
+                        <div className="w-full grid grid-cols-2 md:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            <DashboardCard icon={CalendarCheck} title="My Events"         onClick={() => setActiveView('registrations')} />
+                            <DashboardCard icon={Trophy}        title="History"            onClick={() => setActiveView('history')} />
+                            <DashboardCard icon={Bookmark}      title="Saved" />
+                            <DashboardCard icon={FileText}      title="Invoice" />
+                            <DashboardCard icon={Users}         title="My Team" />
+                            <DashboardCard icon={Newspaper}     title="My News" />
+                            <DashboardCard icon={User}          title="Profile"            onClick={startEditing} />
+                            <DashboardCard icon={PlusCircle}    title="Find Tournaments"   onClick={() => navigate('/player/home')} />
+                            <DashboardCard icon={Store}         title="Store" />
                         </div>
-                    ) : (
+                    )}
+
+                    {/* ── My Registrations ────────────────────────────────── */}
+                    {activeView === 'registrations' && (
                         <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
                             <h3 className="text-2xl font-oswald font-bold tracking-wide">Tournament Registrations</h3>
 
@@ -233,13 +328,7 @@ const PlayerProfilePage = () => {
                                     <Loader2 className="h-8 w-8 text-primary animate-spin" />
                                 </div>
                             ) : myRegistrations.length === 0 ? (
-                                <div className="bg-white/5 border border-white/10 rounded-3xl p-10 text-center flex flex-col items-center gap-4">
-                                    <Trophy className="h-10 w-10 text-gray-500" />
-                                    <p className="text-gray-400">You haven't registered for any tournaments yet.</p>
-                                    <button onClick={() => navigate('/player/home')} className="mt-2 px-6 py-2 bg-primary hover:bg-primary/90 text-white rounded-full transition-colors font-medium">
-                                        Find Tournaments
-                                    </button>
-                                </div>
+                                <EmptyState icon={Trophy} message="You haven't registered for any tournaments yet." cta="Find Tournaments" onCta={() => navigate('/player/home')} />
                             ) : (
                                 <div className="grid grid-cols-1 gap-4">
                                     {myRegistrations.map((reg: any) => (
@@ -255,11 +344,8 @@ const PlayerProfilePage = () => {
                                                         Fee: ₹{reg.categoryDetails?.registrationFee || 0}
                                                     </span>
                                                 </div>
-                                                <div className="flex items-center gap-2 mt-1">
-                                                    <Badge variant="outline" className={`px-2 py-0.5 text-[10px] uppercase font-bold 
-                                                        ${reg.status === 'approved' ? 'text-emerald-400 border-emerald-400/20 bg-emerald-400/10' :
-                                                            reg.status === 'rejected' || reg.status === 'withdrawn' ? 'text-red-400 border-red-400/20 bg-red-400/10' :
-                                                                'text-yellow-400 border-yellow-400/20 bg-yellow-400/10'}`}>
+                                                <div className="flex items-center gap-2 mt-1 flex-wrap">
+                                                    <Badge variant="outline" className={`px-2 py-0.5 text-[10px] uppercase font-bold ${regStatusColor(reg.status)}`}>
                                                         {reg.status}
                                                     </Badge>
                                                     <Badge variant="outline" className="px-2 py-0.5 text-[10px] uppercase font-bold text-gray-400 border-gray-400/20 bg-gray-400/10">
@@ -267,24 +353,50 @@ const PlayerProfilePage = () => {
                                                     </Badge>
                                                 </div>
                                             </div>
-
                                             <div className="flex gap-3 w-full md:w-auto mt-2 md:mt-0">
-                                                <button
-                                                    onClick={() => navigate(`/player/tournament/${reg.tournamentId}`)}
-                                                    className="flex-1 md:flex-none px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm font-medium transition-colors text-center"
-                                                >
+                                                <button onClick={() => navigate(`/player/tournament/${reg.tournamentId}`)} className="flex-1 md:flex-none px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-sm font-medium transition-colors text-center">
                                                     View
                                                 </button>
                                                 {(reg.status === 'pending' || reg.status === 'approved') && (
-                                                    <button
-                                                        onClick={() => handleWithdraw(reg._id)}
-                                                        className="flex-1 md:flex-none px-4 py-2 border border-red-500/30 text-red-500 hover:bg-red-500/10 rounded-lg text-sm font-medium transition-colors text-center"
-                                                    >
+                                                    <button onClick={() => handleWithdraw(reg._id)} className="flex-1 md:flex-none px-4 py-2 border border-red-500/30 text-red-500 hover:bg-red-500/10 rounded-lg text-sm font-medium transition-colors text-center">
                                                         Withdraw
                                                     </button>
                                                 )}
                                             </div>
                                         </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* ── Tournament History ──────────────────────────────── */}
+                    {activeView === 'history' && (
+                        <div className="flex flex-col gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            <h3 className="text-2xl font-oswald font-bold tracking-wide">Tournament History</h3>
+
+                            {/* Aggregate stats banner */}
+                            {playerStats && playerStats.totalTournaments > 0 && (
+                                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                                    <MiniStat label="Tournaments" value={playerStats.totalTournaments} color="text-white" />
+                                    <MiniStat label="Matches"     value={playerStats.totalMatchesPlayed} color="text-blue-400" />
+                                    <MiniStat label="Wins"        value={playerStats.totalMatchesWon}    color="text-green-400" />
+                                    {playerStats.totalEarnings > 0 && (
+                                        <MiniStat label="Total Earnings" value={`₹${playerStats.totalEarnings.toLocaleString()}`} color="text-primary" />
+                                    )}
+                                </div>
+                            )}
+
+                            {historyLoading ? (
+                                <div className="flex justify-center py-10">
+                                    <Loader2 className="h-8 w-8 text-primary animate-spin" />
+                                </div>
+                            ) : tournamentHistory.length === 0 ? (
+                                <EmptyState icon={Award} message="No tournament history yet. Register and participate to see your journey here." cta="Find Tournaments" onCta={() => navigate('/player/home')} />
+                            ) : (
+                                <div className="flex flex-col gap-4">
+                                    {tournamentHistory.map((entry: TournamentHistoryEntry) => (
+                                        <HistoryCard key={entry._id} entry={entry} />
                                     ))}
                                 </div>
                             )}
@@ -297,5 +409,118 @@ const PlayerProfilePage = () => {
         </div>
     );
 };
+
+// ─── History card ─────────────────────────────────────────────────────────────
+const HistoryCard = ({ entry }: { entry: TournamentHistoryEntry }) => {
+    const t    = entry.tournament;
+    const cat  = entry.category;
+    const team = entry.team;
+    const stats = entry.stats;
+
+    return (
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-6 hover:border-white/20 transition-colors">
+            <div className="flex flex-col md:flex-row gap-4 justify-between">
+                {/* Left info */}
+                <div className="flex flex-col gap-2 flex-1 min-w-0">
+                    <div className="flex items-center gap-3 flex-wrap">
+                        <span className="text-xl">{sportEmoji(t?.sport)}</span>
+                        <h4 className="text-lg font-bold font-oswald tracking-wide text-white truncate">
+                            {t?.name || 'Tournament'}
+                        </h4>
+                        {t?.status && (
+                            <Badge variant="outline" className={`text-[10px] uppercase font-bold px-2 py-0.5 ${tournamentStatusColor(t.status)}`}>
+                                {t.status}
+                            </Badge>
+                        )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-3 text-sm text-gray-400">
+                        {cat?.name && <span>📂 {cat.name}</span>}
+                        {t?.venue?.city && <><span className="text-gray-600">•</span><span>📍 {t.venue.city}</span></>}
+                        {t?.startDate && (
+                            <><span className="text-gray-600">•</span>
+                            <span>🗓 {new Date(t.startDate).toLocaleDateString('en-IN', { month: 'short', year: 'numeric' })}</span></>
+                        )}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 mt-1">
+                        <Badge variant="outline" className={`text-[10px] uppercase font-bold px-2 py-0.5 ${regStatusColor(entry.status)}`}>
+                            {entry.status}
+                        </Badge>
+                        {entry.profile?.skillLevel && (
+                            <Badge variant="outline" className={`text-[10px] uppercase font-bold px-2 py-0.5 ${skillColor(entry.profile.skillLevel)}`}>
+                                {entry.profile.skillLevel}
+                            </Badge>
+                        )}
+                        {team && (
+                            <Badge variant="outline" className="text-[10px] font-bold px-2 py-0.5 bg-white/5 border-white/20 text-white flex items-center gap-1">
+                                {team.primaryColor && (
+                                    <span className="inline-block w-2 h-2 rounded-full" style={{ background: team.primaryColor }} />
+                                )}
+                                {team.name}
+                            </Badge>
+                        )}
+                    </div>
+                </div>
+
+                {/* Right: stats + auction price */}
+                <div className="flex flex-col gap-2 items-end shrink-0">
+                    {entry.auctionData?.soldPrice ? (
+                        <div className="flex flex-col items-end">
+                            <span className="text-[10px] text-gray-500 uppercase tracking-wider font-oswald">Auction Price</span>
+                            <span className="text-2xl font-mono font-black text-primary">
+                                ₹{entry.auctionData.soldPrice.toLocaleString()}
+                            </span>
+                        </div>
+                    ) : entry.auctionData?.basePrice ? (
+                        <div className="flex flex-col items-end">
+                            <span className="text-[10px] text-gray-500 uppercase tracking-wider font-oswald">Base Price</span>
+                            <span className="text-lg font-mono font-bold text-gray-300">
+                                ₹{entry.auctionData.basePrice.toLocaleString()}
+                            </span>
+                        </div>
+                    ) : null}
+
+                    {stats && (stats.matchesPlayed > 0 || stats.matchesWon > 0) && (
+                        <div className="flex gap-3 mt-1">
+                            <MiniStat label="Played" value={stats.matchesPlayed} color="text-white" small />
+                            <MiniStat label="Won"    value={stats.matchesWon}    color="text-green-400" small />
+                            {stats.pointsContributed > 0 && (
+                                <MiniStat label="Pts" value={stats.pointsContributed} color="text-primary" small />
+                            )}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+const StatField = ({ label, value }: { label: string; value: string }) => (
+    <div className="flex flex-col gap-1">
+        <span className="text-primary font-medium text-sm">{label}</span>
+        <div className="bg-white/5 border border-white/10 rounded-full px-5 py-2.5 text-white font-medium">
+            {value}
+        </div>
+    </div>
+);
+
+const MiniStat = ({ label, value, color, small }: { label: string; value: string | number; color: string; small?: boolean }) => (
+    <div className={`flex flex-col items-center bg-white/5 border border-white/10 rounded-xl px-4 ${small ? 'py-2' : 'py-3'}`}>
+        <span className={`${small ? 'text-lg' : 'text-2xl'} font-bold font-oswald ${color}`}>{value}</span>
+        <span className="text-[10px] text-gray-500 uppercase tracking-wider font-oswald">{label}</span>
+    </div>
+);
+
+const EmptyState = ({ icon: Icon, message, cta, onCta }: { icon: any; message: string; cta: string; onCta: () => void }) => (
+    <div className="bg-white/5 border border-white/10 rounded-3xl p-10 text-center flex flex-col items-center gap-4">
+        <Icon className="h-10 w-10 text-gray-500" />
+        <p className="text-gray-400 max-w-xs">{message}</p>
+        <button onClick={onCta} className="mt-2 px-6 py-2 bg-primary hover:bg-primary/90 text-white rounded-full transition-colors font-medium">
+            {cta}
+        </button>
+    </div>
+);
 
 export default PlayerProfilePage;

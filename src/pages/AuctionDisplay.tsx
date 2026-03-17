@@ -5,10 +5,27 @@ import { AuctionStatus, Player, Team } from '../types';
 import SpinTheWheel from '../components/SpinTheWheel';
 
 // ============================================================================
-// CONFETTI COMPONENT
+// CONSTANTS
 // ============================================================================
-const CONFETTI_COLORS = ['#F97316', '#FBBF24', '#34D399', '#60A5FA', '#A78BFA', '#F472B6', '#fff'];
+const ACCENT = '#FF7A00';
+const CONFETTI_COLORS = [ACCENT, '#FBBF24', '#34D399', '#60A5FA', '#A78BFA', '#F472B6', '#fff'];
 
+// ============================================================================
+// HELPER: Skill level badge styling
+// ============================================================================
+const getSkillBadge = (level: string) => {
+    switch (level?.toLowerCase()) {
+        case 'beginner':     return { bg: 'rgba(37,99,235,0.15)',  color: '#60a5fa', border: 'rgba(37,99,235,0.4)' };
+        case 'intermediate': return { bg: 'rgba(217,119,6,0.15)',  color: '#fbbf24', border: 'rgba(217,119,6,0.4)' };
+        case 'advanced':     return { bg: 'rgba(255,122,0,0.15)',  color: ACCENT,    border: 'rgba(255,122,0,0.4)' };
+        case 'expert':       return { bg: 'rgba(124,58,237,0.15)', color: '#a78bfa', border: 'rgba(124,58,237,0.4)' };
+        default:             return { bg: 'rgba(75,85,99,0.15)',   color: '#9ca3af', border: 'rgba(75,85,99,0.4)' };
+    }
+};
+
+// ============================================================================
+// CONFETTI OVERLAY
+// ============================================================================
 const ConfettiOverlay: React.FC<{ show: boolean }> = ({ show }) => {
     if (!show) return null;
     return (
@@ -37,17 +54,20 @@ const ConfettiOverlay: React.FC<{ show: boolean }> = ({ show }) => {
 // ============================================================================
 const AuctionDisplay: React.FC = () => {
     const { tournamentId, categoryId } = useParams<{ tournamentId: string; categoryId: string }>();
-    const [status, setStatus] = useState<AuctionStatus | null>(null);
-    const [player, setPlayer] = useState<Player | null>(null);
-    const [teams, setTeams] = useState<Team[]>([]);
-    const [loading, setLoading] = useState(true);
+    const [status, setStatus]           = useState<AuctionStatus | null>(null);
+    const [player, setPlayer]           = useState<Player | null>(null);
+    const [teams, setTeams]             = useState<Team[]>([]);
+    const [loading, setLoading]         = useState(true);
     const [tournamentName, setTournamentName] = useState('');
-    const [categoryName, setCategoryName] = useState('');
-    const [soldLog, setSoldLog] = useState<any[]>([]);
+    const [categoryName, setCategoryName]     = useState('');
+    const [soldLog, setSoldLog]         = useState<any[]>([]);
     const [showConfetti, setShowConfetti] = useState(false);
-    const prevStatusRef = useRef<string | null>(null);
+    const [bidFlash, setBidFlash]       = useState(false);
 
-    // Poll every 2 seconds
+    const prevStatusRef   = useRef<string | null>(null);
+    const prevBidPriceRef = useRef<number>(0);
+
+    // ── Poll every 2 seconds ──────────────────────────────────────────────────
     useEffect(() => {
         if (!tournamentId || !categoryId) return;
 
@@ -61,10 +81,9 @@ const AuctionDisplay: React.FC = () => {
                 setCategoryName((data as any).category?.name || '');
                 setLoading(false);
 
-                // Confetti on sold
                 if (data.auction.status === 'sold' && prevStatusRef.current !== 'sold') {
                     setShowConfetti(true);
-                    setTimeout(() => setShowConfetti(false), 4000);
+                    setTimeout(() => setShowConfetti(false), 4500);
                 }
                 prevStatusRef.current = data.auction.status;
             } catch (err) {
@@ -77,100 +96,154 @@ const AuctionDisplay: React.FC = () => {
         return () => clearInterval(interval);
     }, [tournamentId, categoryId]);
 
-    // Fetch sold log
+    // ── Fetch sold log ────────────────────────────────────────────────────────
     useEffect(() => {
         if (!tournamentId || !categoryId) return;
         auctionApi.getSoldLog(tournamentId, categoryId)
             .then((data: any) => setSoldLog(data.logs || []))
-            .catch(() => { });
+            .catch(() => {});
     }, [tournamentId, categoryId, status?.logsCount]);
 
+    // ── Bid flash animation ───────────────────────────────────────────────────
+    useEffect(() => {
+        const currentBid = status?.liveBid?.currentPrice || 0;
+        if (currentBid > prevBidPriceRef.current && prevBidPriceRef.current > 0) {
+            setBidFlash(true);
+            const t = setTimeout(() => setBidFlash(false), 700);
+            prevBidPriceRef.current = currentBid;
+            return () => clearTimeout(t);
+        }
+        prevBidPriceRef.current = currentBid;
+    }, [status?.liveBid?.currentPrice]);
+
+    // ── LOADING ───────────────────────────────────────────────────────────────
     if (loading) return (
-        <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
-            <div className="animate-spin rounded-full h-32 w-32 border-t-2 border-b-2 border-primary"></div>
+        <div style={{ background: '#0B0B0B' }} className="min-h-screen flex items-center justify-center">
+            <div className="flex flex-col items-center gap-4">
+                <div style={{ width: '48px', height: '48px', border: `3px solid ${ACCENT}30`, borderTop: `3px solid ${ACCENT}`, borderRadius: '50%' }} className="animate-spin" />
+                <span style={{ color: '#4b5563', fontFamily: 'Oswald, sans-serif', fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.25em' }}>
+                    Loading Auction
+                </span>
+            </div>
         </div>
     );
 
     if (!status) return (
-        <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center text-red-500 text-2xl font-oswald font-bold">
+        <div style={{ background: '#0B0B0B' }} className="min-h-screen flex items-center justify-center text-red-500 text-2xl font-oswald font-bold">
             Auction Not Found
         </div>
     );
 
-    // WAIT SCREEN
+    // ── NOT STARTED ───────────────────────────────────────────────────────────
     if (status.status === 'not_started') {
         return (
-            <div className="min-h-screen bg-gradient-to-br from-[#0a0a0a] via-[#1a1a1a] to-[#0a0a0a] flex flex-col items-center justify-center text-white overflow-hidden relative">
-                <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20"></div>
-                <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-primary/5" />
-
-                <h1 className="text-7xl md:text-8xl font-oswald font-extrabold mb-6 tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-primary via-yellow-500 to-primary drop-shadow-[0_2px_10px_rgba(249,115,22,0.5)] z-10 text-center uppercase">
-                    {tournamentName || 'TOURNAMENT'}
-                </h1>
-                <h2 className="text-3xl md:text-4xl text-gray-300 font-montserrat font-light tracking-widest z-10 animate-pulse uppercase">
-                    {categoryName ? `${categoryName} — ` : ''}Auction Starting Soon
-                </h2>
-                <div className="mt-12 flex items-center gap-3 text-primary z-10">
-                    <div className="w-3 h-3 bg-primary rounded-full animate-ping" />
-                    <span className="font-oswald text-xl uppercase tracking-widest">Waiting</span>
-                </div>
-            </div>
-        );
-    }
-
-    // SOLD SCREEN (Celebration)
-    if (status.status === 'sold' && status.lastSoldResult) {
-        return (
-            <div className="min-h-screen bg-[#0a0a0a] flex flex-col items-center justify-center text-white relative overflow-hidden">
-                <ConfettiOverlay show={showConfetti} />
-                <div className="absolute inset-0 bg-gradient-to-b from-green-900/30 to-[#0a0a0a] z-0" />
-                <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-primary/5" />
-
-                <div className="z-10 text-center">
-                    <h1 className="text-[10rem] font-oswald font-black mb-4 text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-emerald-500 drop-shadow-2xl leading-none">
-                        SOLD!
+            <div style={{ background: '#0B0B0B' }} className="min-h-screen flex flex-col items-center justify-center text-white overflow-hidden relative">
+                <div style={{ position: 'absolute', inset: 0, background: `radial-gradient(ellipse at center, ${ACCENT}07 0%, transparent 65%)`, pointerEvents: 'none' }} />
+                <div className="z-10 text-center px-8">
+                    <div style={{ color: ACCENT, fontSize: '11px', fontFamily: 'Oswald, sans-serif', textTransform: 'uppercase', letterSpacing: '0.4em', marginBottom: '20px' }}>
+                        Badminton League Auction
+                    </div>
+                    <h1 className="font-oswald font-black text-white uppercase leading-none tracking-tight" style={{ fontSize: 'clamp(56px, 9vw, 96px)' }}>
+                        {tournamentName || 'TOURNAMENT'}
                     </h1>
-
-                    <div className="bg-white/5 backdrop-blur-md p-10 md:p-12 rounded-3xl border border-white/10 shadow-2xl max-w-2xl mx-auto">
-                        <div className="text-5xl md:text-6xl font-oswald font-black mb-4 uppercase tracking-tight">{status.lastSoldResult.playerName}</div>
-                        <div className="text-2xl text-gray-400 mb-4 font-montserrat font-light tracking-widest">Sold to</div>
-                        <div className="text-6xl md:text-7xl font-oswald font-black tracking-wider drop-shadow-lg mb-6" style={{ color: status.lastSoldResult.teamColor || '#F97316' }}>
-                            {status.lastSoldResult.teamName}
-                        </div>
-                        <div className="inline-block bg-green-600 px-8 py-3 rounded-full text-4xl md:text-5xl font-mono font-bold shadow-lg">
-                            ₹{status.lastSoldResult.soldPrice.toLocaleString()}
-                        </div>
+                    {categoryName && (
+                        <h2 className="font-oswald uppercase tracking-widest" style={{ fontSize: '22px', color: '#6b7280', marginTop: '10px' }}>
+                            {categoryName} — Auction
+                        </h2>
+                    )}
+                    <div style={{ width: '56px', height: '3px', background: ACCENT, margin: '28px auto 36px', borderRadius: '999px' }} />
+                    <div className="flex items-center justify-center gap-3">
+                        <div style={{ width: '10px', height: '10px', background: ACCENT, borderRadius: '50%', boxShadow: `0 0 14px ${ACCENT}` }} className="animate-ping" />
+                        <span style={{ color: '#6b7280', fontFamily: 'Oswald, sans-serif', fontSize: '16px', textTransform: 'uppercase', letterSpacing: '0.3em' }}>
+                            Starting Soon
+                        </span>
                     </div>
                 </div>
             </div>
         );
     }
 
-    // COMPLETED SCREEN
+    // ── SOLD CELEBRATION ──────────────────────────────────────────────────────
+    if (status.status === 'sold' && status.lastSoldResult) {
+        return (
+            <div style={{ background: '#0B0B0B' }} className="min-h-screen flex flex-col items-center justify-center text-white relative overflow-hidden">
+                <ConfettiOverlay show={showConfetti} />
+                <style>{`
+                    @keyframes soldIn {
+                        0%   { opacity: 0; transform: scale(0.88) translateY(24px); }
+                        100% { opacity: 1; transform: scale(1)    translateY(0); }
+                    }
+                    .sold-anim { animation: soldIn 0.65s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+                `}</style>
+                <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(ellipse at center, rgba(34,197,94,0.07) 0%, transparent 60%)', pointerEvents: 'none' }} />
+                <div className="z-10 text-center sold-anim px-8">
+                    <div style={{ color: '#6b7280', fontSize: '12px', fontFamily: 'Oswald, sans-serif', textTransform: 'uppercase', letterSpacing: '0.4em', marginBottom: '12px' }}>
+                        Sold To
+                    </div>
+                    <div className="font-oswald font-black uppercase leading-none tracking-tight"
+                         style={{ fontSize: 'clamp(52px, 10vw, 108px)', color: status.lastSoldResult.teamColor || ACCENT, textShadow: `0 0 60px ${status.lastSoldResult.teamColor || ACCENT}50` }}>
+                        {status.lastSoldResult.teamName}
+                    </div>
+                    <div style={{ width: '72px', height: '4px', background: ACCENT, margin: '18px auto 20px', borderRadius: '999px' }} />
+                    <div className="font-oswald font-black uppercase" style={{ fontSize: 'clamp(28px, 4vw, 44px)', color: '#e5e7eb', marginBottom: '24px' }}>
+                        {status.lastSoldResult.playerName}
+                    </div>
+                    <div style={{
+                        display: 'inline-block',
+                        background: 'rgba(34,197,94,0.12)',
+                        border: '2px solid rgba(34,197,94,0.3)',
+                        color: '#4ade80',
+                        padding: '14px 40px',
+                        borderRadius: '999px',
+                        fontSize: 'clamp(36px, 4vw, 52px)',
+                        fontFamily: 'monospace',
+                        fontWeight: 900,
+                    }}>
+                        ₹{status.lastSoldResult.soldPrice.toLocaleString()}
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // ── COMPLETED ─────────────────────────────────────────────────────────────
     if (status.status === 'completed') {
         return (
-            <div className="min-h-screen bg-[#0a0a0a] text-white p-10 flex flex-col items-center font-montserrat">
-                <h1 className="text-6xl md:text-7xl font-oswald font-black mb-4 text-transparent bg-clip-text bg-gradient-to-r from-primary to-yellow-500 uppercase tracking-tight">
-                    Auction Complete
-                </h1>
-                <p className="text-gray-400 text-xl mb-12 font-light">{tournamentName} — {categoryName}</p>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 w-full max-w-6xl">
+            <div style={{ background: '#0B0B0B' }} className="min-h-screen text-white p-10 flex flex-col items-center font-montserrat">
+                <div className="text-center mb-12">
+                    <div style={{ color: ACCENT, fontSize: '11px', fontFamily: 'Oswald, sans-serif', textTransform: 'uppercase', letterSpacing: '0.4em', marginBottom: '12px' }}>
+                        Final Results
+                    </div>
+                    <h1 className="font-oswald font-black text-white uppercase tracking-tight" style={{ fontSize: 'clamp(42px, 6vw, 72px)' }}>
+                        Auction Complete
+                    </h1>
+                    <p style={{ color: '#6b7280', fontSize: '16px', marginTop: '10px', fontWeight: 300 }}>
+                        {tournamentName} — {categoryName}
+                    </p>
+                    <div style={{ width: '56px', height: '3px', background: ACCENT, margin: '16px auto 0', borderRadius: '999px' }} />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 w-full max-w-6xl">
                     {teams.map(team => (
-                        <div key={team._id} className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden shadow-xl hover:border-white/20 transition-colors">
-                            <div className="h-2 w-full" style={{ backgroundColor: team.primaryColor || '#F97316' }} />
-                            <div className="p-6 space-y-3">
-                                <h3 className="text-2xl font-oswald font-bold">{team.name}</h3>
-                                <div className="flex justify-between border-b border-white/10 pb-2">
-                                    <span className="text-gray-400">Spent</span>
-                                    <span className="font-mono font-bold text-primary">₹{team.totalSpent.toLocaleString()}</span>
+                        <div key={team._id} style={{ background: '#121212', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '16px', overflow: 'hidden' }}>
+                            <div style={{ height: '4px', background: team.primaryColor || ACCENT }} />
+                            <div style={{ padding: '20px 24px' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+                                    <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: team.primaryColor || ACCENT, boxShadow: `0 0 8px ${team.primaryColor || ACCENT}60` }} />
+                                    <h3 className="font-oswald font-bold uppercase text-white" style={{ fontSize: '20px' }}>{team.name}</h3>
                                 </div>
-                                <div className="flex justify-between border-b border-white/10 pb-2">
-                                    <span className="text-gray-400">Budget Left</span>
-                                    <span className="font-mono text-green-400 font-bold">₹{team.budget.toLocaleString()}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-gray-400">Players</span>
-                                    <span className="font-bold">{team.playersCount}</span>
+                                <div style={{ borderTop: '1px solid rgba(255,255,255,0.07)', paddingTop: '12px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <span style={{ color: '#6b7280', fontSize: '14px' }}>Total Spent</span>
+                                        <span style={{ color: ACCENT, fontFamily: 'monospace', fontWeight: 700 }}>₹{team.totalSpent.toLocaleString()}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <span style={{ color: '#6b7280', fontSize: '14px' }}>Budget Left</span>
+                                        <span style={{ color: '#4ade80', fontFamily: 'monospace', fontWeight: 700 }}>₹{team.budget.toLocaleString()}</span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                        <span style={{ color: '#6b7280', fontSize: '14px' }}>Players</span>
+                                        <span style={{ color: '#ffffff', fontWeight: 700 }}>{team.playersCount}</span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -180,65 +253,194 @@ const AuctionDisplay: React.FC = () => {
         );
     }
 
-    // MAIN AUCTION DISPLAY (Broadcast Style)
+    // ── MAIN AUCTION BROADCAST ────────────────────────────────────────────────
+    const currentBid  = status.liveBid?.currentPrice || (player?.auctionData?.basePrice ?? 0);
+    const basePrice   = player?.auctionData?.basePrice ?? 0;
+    const hardLimit   = status.settings?.hardLimit ?? 0;
+    const bidProgress = hardLimit > basePrice
+        ? Math.min(100, ((currentBid - basePrice) / (hardLimit - basePrice)) * 100)
+        : 0;
+
     return (
-        <div className="h-screen bg-[#0a0a0a] text-white overflow-hidden flex flex-col font-montserrat">
+        <div style={{ background: '#0B0B0B' }} className="h-screen text-white overflow-hidden flex flex-col font-montserrat">
             <ConfettiOverlay show={showConfetti} />
 
-            {/* TOP HEADER */}
-            <div className="h-20 bg-gradient-to-r from-[#1a1a1a] to-[#111] flex items-center justify-between px-8 shadow-2xl z-20 border-b border-white/10">
-                <div className="flex items-center gap-4">
-                    <span className="text-3xl">🏸</span>
-                    <h1 className="text-2xl font-oswald font-bold tracking-wider uppercase text-white/90">
-                        {tournamentName || 'AUCTION'} <span className="text-primary">— {categoryName}</span>
-                    </h1>
-                </div>
+            {/* ── GLOBAL ANIMATION STYLES ────────────────────────────────── */}
+            <style>{`
+                @keyframes bidPulse {
+                    0%   { transform: scale(1);    filter: drop-shadow(0 0  0px ${ACCENT}); }
+                    35%  { transform: scale(1.07); filter: drop-shadow(0 0 28px ${ACCENT}); }
+                    100% { transform: scale(1);    filter: drop-shadow(0 0  0px ${ACCENT}); }
+                }
+                .bid-flash { animation: bidPulse 0.65s cubic-bezier(0.34, 1.56, 0.64, 1); }
 
-                <div className="flex gap-6 text-sm font-oswald font-bold tracking-widest text-gray-400 uppercase">
+                @keyframes livePulse {
+                    0%, 100% { opacity: 1; }
+                    50%       { opacity: 0.25; }
+                }
+                .live-dot { animation: livePulse 1.4s ease-in-out infinite; }
+
+                #teams-panel::-webkit-scrollbar { display: none; }
+                #teams-panel { -ms-overflow-style: none; scrollbar-width: none; }
+
+                #sold-log::-webkit-scrollbar { width: 3px; }
+                #sold-log::-webkit-scrollbar-track { background: transparent; }
+                #sold-log::-webkit-scrollbar-thumb { background: rgba(255,122,0,0.25); border-radius: 999px; }
+
+                #bid-history::-webkit-scrollbar { display: none; }
+                #bid-history { -ms-overflow-style: none; scrollbar-width: none; }
+            `}</style>
+
+            {/* ══════════════════════════════════════════════════════════════
+                TOP BAR
+            ══════════════════════════════════════════════════════════════ */}
+            <div style={{
+                background: '#121212',
+                borderBottom: '1px solid rgba(255,255,255,0.07)',
+                height: '64px',
+                flexShrink: 0,
+                zIndex: 20,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '0 28px',
+            }}>
+                {/* Left: League title */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span style={{ fontSize: '22px', userSelect: 'none' }}>🏸</span>
                     <div>
-                        Player <span className="text-white text-lg ml-1">{status.currentPlayerIndex + 1}</span> / {status.totalPlayers}
+                        <div style={{ color: '#ffffff', fontFamily: 'Oswald, sans-serif', fontWeight: 700, fontSize: '17px', textTransform: 'uppercase', letterSpacing: '0.05em', lineHeight: 1.2 }}>
+                            {tournamentName || 'Premier League'}
+                        </div>
+                        {categoryName && (
+                            <div style={{ color: ACCENT, fontSize: '10px', fontFamily: 'Oswald, sans-serif', textTransform: 'uppercase', letterSpacing: '0.2em', opacity: 0.85 }}>
+                                {categoryName}
+                            </div>
+                        )}
                     </div>
                 </div>
 
-                <div className="flex items-center gap-3">
+                {/* Center: Auction progress */}
+                <div style={{ textAlign: 'center' }}>
+                    <div style={{ color: '#4b5563', fontSize: '9px', fontFamily: 'Oswald, sans-serif', textTransform: 'uppercase', letterSpacing: '0.25em', marginBottom: '2px' }}>
+                        Auction Progress
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px', justifyContent: 'center', fontFamily: 'Oswald, sans-serif', fontWeight: 900 }}>
+                        <span style={{ color: ACCENT, fontSize: '26px', lineHeight: 1 }}>{status.currentPlayerIndex + 1}</span>
+                        <span style={{ color: '#4b5563', fontSize: '18px' }}>/</span>
+                        <span style={{ color: '#d1d5db', fontSize: '18px' }}>{status.totalPlayers}</span>
+                        <span style={{ color: '#4b5563', fontSize: '11px', fontWeight: 400, marginLeft: '2px' }}>players</span>
+                    </div>
+                </div>
+
+                {/* Right: LIVE indicator */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
                     {status.status === 'paused' && (
-                        <div className="animate-pulse bg-yellow-600 px-4 py-1 rounded-full text-xs font-bold uppercase tracking-widest">
+                        <div style={{
+                            background: 'rgba(234,179,8,0.12)',
+                            border: '1px solid rgba(234,179,8,0.3)',
+                            color: '#eab308',
+                            padding: '4px 14px',
+                            borderRadius: '999px',
+                            fontSize: '11px',
+                            fontFamily: 'Oswald, sans-serif',
+                            fontWeight: 700,
+                            letterSpacing: '0.12em',
+                            textTransform: 'uppercase',
+                        }}>
                             Paused
                         </div>
                     )}
-                    <div className="text-red-500 font-bold flex items-center gap-2 font-oswald uppercase tracking-widest">
-                        <div className="w-3 h-3 bg-red-500 rounded-full animate-ping" />
-                        Live
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                        <div className="live-dot" style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#ef4444', boxShadow: '0 0 10px #ef4444' }} />
+                        <span style={{ color: '#ef4444', fontFamily: 'Oswald, sans-serif', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.15em', fontSize: '14px' }}>
+                            LIVE
+                        </span>
                     </div>
                 </div>
             </div>
 
-            {/* MAIN STAGE */}
-            <div className="flex-1 flex relative overflow-hidden">
-                {/* BACKGROUND ACCENTS */}
-                <div className="absolute top-0 right-0 w-2/3 h-full bg-gradient-to-l from-primary/5 to-transparent pointer-events-none" />
-                <div className="absolute bottom-0 left-0 w-1/3 h-1/2 bg-gradient-to-t from-primary/5 to-transparent pointer-events-none" />
+            {/* ══════════════════════════════════════════════════════════════
+                THREE-COLUMN BODY
+            ══════════════════════════════════════════════════════════════ */}
+            <div style={{ flex: 1, display: 'flex', overflow: 'hidden' }}>
 
-                {/* LEFT: PLAYER VISUAL */}
-                <div className="w-5/12 relative flex items-center justify-center p-12 z-10">
-                    <div className="relative">
-                        <div className="absolute inset-0 bg-primary blur-[100px] opacity-10 rounded-full" />
-                        <div className="relative w-80 h-80 xl:w-96 xl:h-96 bg-gradient-to-b from-[#1a1a1a] to-[#111] rounded-full border-4 border-primary shadow-[0_0_50px_rgba(249,115,22,0.2)] flex items-center justify-center overflow-hidden">
-                            {player?.profile.photo ? (
-                                <img src={player.profile.photo} alt={`${player.profile.firstName} ${player.profile.lastName}`} className="w-full h-full object-cover" />
-                            ) : (
-                                <span className="text-9xl select-none filter drop-shadow-lg">👤</span>
-                            )}
-                        </div>
-                        <div className="absolute -bottom-6 left-1/2 transform -translate-x-1/2 bg-primary text-white px-8 py-2 rounded-full font-oswald font-bold uppercase tracking-widest shadow-xl border border-primary/50 whitespace-nowrap text-sm">
-                            {player?.profile.skillLevel || 'Player'}
-                        </div>
+                {/* ── LEFT PANEL: TEAMS ───────────────────────────────────── */}
+                <div id="teams-panel" style={{
+                    width: '21%',
+                    background: '#121212',
+                    borderRight: '1px solid rgba(255,255,255,0.06)',
+                    padding: '20px 14px',
+                    flexShrink: 0,
+                    overflowY: 'auto',
+                }}>
+                    <div style={{ color: '#4b5563', fontSize: '10px', fontFamily: 'Oswald, sans-serif', textTransform: 'uppercase', letterSpacing: '0.22em', marginBottom: '14px', paddingLeft: '2px' }}>
+                        Participating Teams
+                    </div>
+
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                        {teams.map(team => (
+                            <div key={team._id} style={{
+                                background: 'rgba(255,255,255,0.03)',
+                                border: '1px solid rgba(255,255,255,0.07)',
+                                borderRadius: '12px',
+                                padding: '12px 13px',
+                            }}>
+                                {/* Team name row */}
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '9px', marginBottom: '9px' }}>
+                                    <div style={{
+                                        width: '9px', height: '9px', borderRadius: '50%', flexShrink: 0,
+                                        background: team.primaryColor || ACCENT,
+                                        boxShadow: `0 0 8px ${team.primaryColor || ACCENT}55`,
+                                    }} />
+                                    <span style={{
+                                        color: '#f3f4f6', fontFamily: 'Oswald, sans-serif', fontWeight: 700,
+                                        fontSize: '13px', textTransform: 'uppercase', letterSpacing: '0.04em',
+                                        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                    }}>
+                                        {team.name}
+                                    </span>
+                                </div>
+                                {/* Stats */}
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '5px' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span style={{ color: '#4b5563', fontSize: '10px', fontFamily: 'Oswald, sans-serif', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Purse Left</span>
+                                        <span style={{ color: '#4ade80', fontFamily: 'monospace', fontWeight: 700, fontSize: '12px' }}>
+                                            ₹{team.budget >= 100000 ? (team.budget / 100000).toFixed(1) + 'L' : team.budget.toLocaleString()}
+                                        </span>
+                                    </div>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                        <span style={{ color: '#4b5563', fontSize: '10px', fontFamily: 'Oswald, sans-serif', textTransform: 'uppercase', letterSpacing: '0.1em' }}>Players</span>
+                                        <span style={{ color: '#e5e7eb', fontWeight: 700, fontSize: '12px' }}>{team.playersCount}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
                     </div>
                 </div>
 
-                {/* CENTER: PLAYER INFO / TIE-BREAKER */}
-                <div className="w-4/12 flex flex-col justify-center z-10 pl-4">
-                    {status.liveBid?.tieBreakerActive && status.liveBid?.tiedTeams && status.liveBid.tiedTeams.length >= 2 ? (
+                {/* ── CENTER PANEL: CURRENT PLAYER (DOMINANT) ─────────────── */}
+                <div style={{
+                    flex: 1,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '20px 28px',
+                    position: 'relative',
+                    overflow: 'hidden',
+                }}>
+                    {/* Ambient glow */}
+                    <div style={{
+                        position: 'absolute', top: '50%', left: '50%',
+                        transform: 'translate(-50%, -50%)',
+                        width: '560px', height: '560px',
+                        background: `radial-gradient(circle, ${ACCENT}07 0%, transparent 65%)`,
+                        pointerEvents: 'none',
+                    }} />
+
+                    {/* Tie-breaker spin wheel */}
+                    {status.liveBid?.tieBreakerActive && (status.liveBid?.tiedTeams?.length ?? 0) >= 2 ? (
                         <div className="animate-in fade-in zoom-in-95 duration-500">
                             <SpinTheWheel
                                 tiedTeams={status.liveBid.tiedTeams.map(id => {
@@ -252,86 +454,188 @@ const AuctionDisplay: React.FC = () => {
                             />
                         </div>
                     ) : player ? (
-                        <div className="space-y-6">
-                            <div>
-                                <h2 className="text-6xl xl:text-7xl font-oswald font-black text-white uppercase leading-tight drop-shadow-xl tracking-tighter">
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', width: '100%', maxWidth: '460px', zIndex: 10, gap: '18px' }}>
+
+                            {/* ── AVATAR ── */}
+                            <div style={{ position: 'relative', marginBottom: '4px' }}>
+                                <div style={{
+                                    width: '148px', height: '148px',
+                                    borderRadius: '50%',
+                                    border: `3px solid ${ACCENT}38`,
+                                    boxShadow: `0 0 0 8px ${ACCENT}08, 0 0 50px ${ACCENT}16, 0 16px 40px rgba(0,0,0,0.55)`,
+                                    background: 'linear-gradient(145deg, #1e1e1e 0%, #0f0f0f 100%)',
+                                    overflow: 'hidden',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    flexShrink: 0,
+                                }}>
+                                    {player.profile.photo ? (
+                                        <img
+                                            src={player.profile.photo}
+                                            alt={`${player.profile.firstName} ${player.profile.lastName}`}
+                                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                        />
+                                    ) : (
+                                        <span style={{ fontSize: '56px', lineHeight: 1, userSelect: 'none' }}>👤</span>
+                                    )}
+                                </div>
+
+                                {/* Skill level badge */}
+                                {player.profile.skillLevel && (() => {
+                                    const badge = getSkillBadge(player.profile.skillLevel);
+                                    return (
+                                        <div style={{
+                                            position: 'absolute', bottom: '-11px', left: '50%', transform: 'translateX(-50%)',
+                                            background: badge.bg, color: badge.color, border: `1px solid ${badge.border}`,
+                                            padding: '3px 16px', borderRadius: '999px',
+                                            fontSize: '10px', fontWeight: 700, fontFamily: 'Oswald, sans-serif',
+                                            textTransform: 'uppercase', letterSpacing: '0.12em', whiteSpace: 'nowrap',
+                                        }}>
+                                            {player.profile.skillLevel}
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+
+                            {/* ── PLAYER NAME ── */}
+                            <div style={{ textAlign: 'center', marginTop: '6px' }}>
+                                <h2 style={{
+                                    fontFamily: 'Oswald, sans-serif', fontWeight: 900,
+                                    textTransform: 'uppercase', color: '#ffffff',
+                                    fontSize: 'clamp(34px, 3.6vw, 48px)',
+                                    lineHeight: 1, letterSpacing: '-0.01em',
+                                }}>
                                     {player.profile.firstName} {player.profile.lastName}
                                 </h2>
-                                <div className="h-1 w-32 bg-primary mt-4 rounded-full" />
+                                <div style={{ width: '44px', height: '3px', background: ACCENT, margin: '10px auto 0', borderRadius: '999px' }} />
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4 mt-8">
-                                <div className="bg-white/5 backdrop-blur border border-white/10 p-4 rounded-xl">
-                                    <div className="text-gray-500 text-xs uppercase tracking-widest mb-1 font-oswald">Age</div>
-                                    <div className="text-2xl font-bold">{player.profile.age} Years</div>
+                            {/* ── ATTRIBUTE CARDS ── */}
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px', width: '100%' }}>
+                                <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '10px', padding: '10px 14px' }}>
+                                    <div style={{ color: '#4b5563', fontSize: '10px', fontFamily: 'Oswald, sans-serif', textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: '4px' }}>Age</div>
+                                    <div style={{ color: '#ffffff', fontWeight: 700, fontSize: '18px' }}>
+                                        {player.profile.age}
+                                        <span style={{ color: '#6b7280', fontWeight: 400, fontSize: '13px', marginLeft: '3px' }}>yrs</span>
+                                    </div>
                                 </div>
-                                <div className="bg-white/5 backdrop-blur border border-white/10 p-4 rounded-xl">
-                                    <div className="text-gray-500 text-xs uppercase tracking-widest mb-1 font-oswald">Gender</div>
-                                    <div className="text-2xl font-bold capitalize">{player.profile.gender}</div>
+                                <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: '10px', padding: '10px 14px' }}>
+                                    <div style={{ color: '#4b5563', fontSize: '10px', fontFamily: 'Oswald, sans-serif', textTransform: 'uppercase', letterSpacing: '0.15em', marginBottom: '4px' }}>Gender</div>
+                                    <div style={{ color: '#ffffff', fontWeight: 700, fontSize: '18px', textTransform: 'capitalize' }}>{player.profile.gender}</div>
                                 </div>
                             </div>
 
-                            <div className="bg-white/5 backdrop-blur border border-white/10 p-4 rounded-xl inline-block">
-                                <div className="text-primary text-xs uppercase tracking-widest mb-1 font-oswald font-bold">Base Price</div>
-                                <div className="text-4xl font-mono font-black text-white">₹{player.auctionData.basePrice.toLocaleString()}</div>
+                            {/* ── PRICE BOX ── */}
+                            <div style={{
+                                width: '100%',
+                                background: 'rgba(255,255,255,0.02)',
+                                border: '1px solid rgba(255,255,255,0.07)',
+                                borderRadius: '16px',
+                                overflow: 'hidden',
+                            }}>
+                                {/* Base price */}
+                                <div style={{ padding: '14px 22px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <div style={{ color: '#4b5563', fontSize: '10px', fontFamily: 'Oswald, sans-serif', textTransform: 'uppercase', letterSpacing: '0.2em' }}>
+                                        Base Price
+                                    </div>
+                                    <div style={{ color: '#9ca3af', fontFamily: 'monospace', fontWeight: 700, fontSize: '18px' }}>
+                                        ₹{basePrice.toLocaleString()}
+                                    </div>
+                                </div>
+
+                                {/* Current bid — LARGEST element */}
+                                <div style={{ padding: '18px 22px', textAlign: 'center', background: `${ACCENT}06` }}>
+                                    <div style={{ color: '#6b7280', fontSize: '10px', fontFamily: 'Oswald, sans-serif', textTransform: 'uppercase', letterSpacing: '0.22em', marginBottom: '8px' }}>
+                                        Current Bid
+                                    </div>
+                                    <div
+                                        className={bidFlash ? 'bid-flash' : ''}
+                                        style={{
+                                            fontFamily: 'Oswald, sans-serif',
+                                            fontWeight: 900,
+                                            fontSize: 'clamp(52px, 5.8vw, 68px)',
+                                            color: ACCENT,
+                                            lineHeight: 1,
+                                            letterSpacing: '-0.02em',
+                                            display: 'inline-block',
+                                        }}
+                                    >
+                                        ₹{currentBid.toLocaleString()}
+                                    </div>
+                                    {status.liveBid?.highestBidderName && (
+                                        <div style={{ color: '#4b5563', fontSize: '11px', fontFamily: 'Oswald, sans-serif', textTransform: 'uppercase', letterSpacing: '0.15em', marginTop: '6px' }}>
+                                            by <span style={{ color: ACCENT, fontWeight: 700 }}>{status.liveBid.highestBidderName}</span>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         </div>
                     ) : (
-                        <div className="text-3xl text-gray-600 italic font-light">Preparing next player...</div>
+                        <div style={{ color: '#4b5563', fontSize: '22px', fontStyle: 'italic', fontWeight: 300 }}>
+                            Preparing next player...
+                        </div>
                     )}
                 </div>
 
-                {/* RIGHT: LIVE BID + BID HISTORY + SOLD LOG */}
-                <div className="w-3/12 bg-[#111] border-l border-white/10 flex flex-col relative">
-                    {/* LIVE BID */}
-                    {status.liveBid && (status.status === 'in_progress' || status.status === 'paused') && (
-                        <div className="px-5 py-4 border-b border-white/10 bg-gradient-to-r from-primary/5 to-transparent">
-                            <div className="text-gray-500 text-[10px] uppercase tracking-widest font-oswald mb-2">Current Bid</div>
-                            <div className="text-4xl font-mono font-black text-white mb-1">₹{(status.liveBid.currentPrice || 0).toLocaleString()}</div>
-                            {status.liveBid.highestBidderName && (
-                                <div className="text-sm text-gray-400">
-                                    by <span className="text-primary font-bold">{status.liveBid.highestBidderName}</span>
-                                </div>
-                            )}
-                            {status.settings?.hardLimit > 0 && (
-                                <div className="mt-2">
-                                    <div className="flex justify-between text-[9px] text-gray-600 mb-0.5">
-                                        <span>₹{player?.auctionData?.basePrice?.toLocaleString() || '0'}</span>
-                                        <span className="text-red-400">₹{status.settings.hardLimit.toLocaleString()}</span>
-                                    </div>
-                                    <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
-                                        <div className="h-full rounded-full transition-all duration-500"
-                                            style={{
-                                                width: `${Math.min(100, (status.liveBid.currentPrice / status.settings.hardLimit) * 100)}%`,
-                                                background: status.liveBid.currentPrice >= status.settings.hardLimit
-                                                    ? 'linear-gradient(90deg, #ef4444, #f59e0b)'
-                                                    : 'linear-gradient(90deg, #3b82f6, #8b5cf6)',
-                                            }} />
-                                    </div>
-                                </div>
-                            )}
-                            {(status.liveBid.tiedTeams?.length || 0) >= 2 && (
-                                <div className="mt-2 text-xs text-amber-400 font-bold animate-pulse">
-                                    ⚡ {status.liveBid.tiedTeams.length} teams in tie-breaker!
-                                </div>
-                            )}
+                {/* ── RIGHT PANEL: AUCTION STATUS ─────────────────────────── */}
+                <div style={{
+                    width: '30%',
+                    background: '#121212',
+                    borderLeft: '1px solid rgba(255,255,255,0.06)',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    flexShrink: 0,
+                    overflow: 'hidden',
+                }}>
+
+                    {/* Bid Progress Bar */}
+                    {player && hardLimit > basePrice && (
+                        <div style={{ padding: '18px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
+                            <div style={{ color: '#4b5563', fontSize: '10px', fontFamily: 'Oswald, sans-serif', textTransform: 'uppercase', letterSpacing: '0.22em', marginBottom: '10px' }}>
+                                Current Bid Progress
+                            </div>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                <span style={{ color: '#6b7280', fontSize: '12px', fontFamily: 'monospace' }}>₹{basePrice.toLocaleString()}</span>
+                                <span style={{ color: ACCENT, fontSize: '13px', fontFamily: 'monospace', fontWeight: 700 }}>₹{currentBid.toLocaleString()}</span>
+                                <span style={{ color: '#6b7280', fontSize: '12px', fontFamily: 'monospace' }}>₹{hardLimit.toLocaleString()}</span>
+                            </div>
+                            <div style={{ height: '6px', background: 'rgba(255,255,255,0.05)', borderRadius: '999px', overflow: 'hidden' }}>
+                                <div style={{
+                                    height: '100%',
+                                    width: `${bidProgress}%`,
+                                    background: `linear-gradient(90deg, ${ACCENT}, #ffaa4a)`,
+                                    borderRadius: '999px',
+                                    transition: 'width 0.5s ease',
+                                    boxShadow: `0 0 8px ${ACCENT}55`,
+                                }} />
+                            </div>
                         </div>
                     )}
 
-                    {/* BID HISTORY */}
+                    {/* Bid History */}
                     {status.liveBid?.bidHistory && status.liveBid.bidHistory.length > 0 && (
-                        <div className="px-5 py-3 border-b border-white/10">
-                            <h3 className="font-oswald font-bold text-[10px] uppercase tracking-widest text-gray-500 mb-2">Bid History</h3>
-                            <div className="space-y-1 max-h-[160px] overflow-y-auto">
-                                {[...status.liveBid.bidHistory].reverse().map((bid, i) => {
+                        <div style={{ padding: '14px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
+                            <div style={{ color: '#4b5563', fontSize: '10px', fontFamily: 'Oswald, sans-serif', textTransform: 'uppercase', letterSpacing: '0.22em', marginBottom: '8px' }}>
+                                Bid History
+                            </div>
+                            <div id="bid-history" style={{ display: 'flex', flexDirection: 'column', gap: '5px', maxHeight: '116px', overflowY: 'auto' }}>
+                                {[...status.liveBid.bidHistory].reverse().slice(0, 6).map((bid, i) => {
                                     const team = teams.find(t => t._id === bid.teamId);
                                     return (
-                                        <div key={i} className={`flex items-center justify-between py-1.5 px-2 rounded-lg text-xs ${i === 0 ? 'bg-primary/10 border border-primary/20' : ''}`}>
-                                            <div className="flex items-center gap-1.5">
-                                                <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: team?.primaryColor || '#64748b' }} />
-                                                <span className={`font-semibold ${i === 0 ? 'text-primary' : 'text-gray-300'}`}>{bid.teamName}</span>
+                                        <div key={i} style={{
+                                            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                                            padding: '6px 10px', borderRadius: '8px',
+                                            background: i === 0 ? `${ACCENT}12` : 'rgba(255,255,255,0.025)',
+                                            border: `1px solid ${i === 0 ? `${ACCENT}28` : 'transparent'}`,
+                                        }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+                                                <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: team?.primaryColor || '#64748b', flexShrink: 0 }} />
+                                                <span style={{ color: i === 0 ? ACCENT : '#9ca3af', fontSize: '12px', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                    {bid.teamName}
+                                                </span>
                                             </div>
-                                            <span className={`font-mono font-bold ${i === 0 ? 'text-white' : 'text-gray-500'}`}>₹{bid.amount.toLocaleString()}</span>
+                                            <span style={{ color: i === 0 ? '#ffffff' : '#6b7280', fontFamily: 'monospace', fontWeight: 700, fontSize: '12px', flexShrink: 0 }}>
+                                                ₹{bid.amount.toLocaleString()}
+                                            </span>
                                         </div>
                                     );
                                 })}
@@ -339,57 +643,77 @@ const AuctionDisplay: React.FC = () => {
                         </div>
                     )}
 
-                    {/* SOLD LOG */}
-                    <div className="px-5 py-4 border-b border-white/10">
-                        <h3 className="font-oswald font-bold text-sm uppercase tracking-widest text-gray-400">Sold Players ({soldLog.length})</h3>
+                    {/* Tie-breaker warning */}
+                    {(status.liveBid?.tiedTeams?.length ?? 0) >= 2 && !status.liveBid?.tieBreakerActive && (
+                        <div style={{ padding: '10px 20px', borderBottom: '1px solid rgba(255,255,255,0.06)', background: 'rgba(251,191,36,0.07)', flexShrink: 0 }}>
+                            <div className="animate-pulse" style={{ color: '#fbbf24', fontSize: '12px', fontFamily: 'Oswald, sans-serif', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                                ⚡ {status.liveBid!.tiedTeams.length} Teams Tied — Tie-Breaker Pending
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Sold Players header */}
+                    <div style={{ padding: '14px 20px 8px', borderBottom: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
+                        <div style={{ color: '#4b5563', fontSize: '10px', fontFamily: 'Oswald, sans-serif', textTransform: 'uppercase', letterSpacing: '0.22em' }}>
+                            Sold Players <span style={{ color: '#374151' }}>({soldLog.length})</span>
+                        </div>
                     </div>
-                    <div className="flex-1 overflow-y-auto px-4 py-3 space-y-2">
+
+                    {/* Sold Players list */}
+                    <div id="sold-log" style={{ flex: 1, overflowY: 'auto', padding: '10px 14px' }}>
                         {soldLog.length === 0 ? (
-                            <p className="text-gray-600 text-sm text-center py-8">No players sold yet</p>
+                            <div style={{ color: '#374151', fontSize: '11px', textAlign: 'center', paddingTop: '28px', fontFamily: 'Oswald, sans-serif', textTransform: 'uppercase', letterSpacing: '0.15em' }}>
+                                No players sold yet
+                            </div>
                         ) : (
-                            [...soldLog].reverse().map((log, i) => (
-                                <div key={log._id || i} className="flex items-center justify-between py-2.5 px-3 bg-white/5 rounded-xl border border-white/5">
-                                    <div>
-                                        <p className="text-sm font-medium text-white">{log.playerName}</p>
-                                        <p className="text-[11px] text-gray-500">→ {log.teamName}</p>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '7px' }}>
+                                {[...soldLog].reverse().map((log, i) => (
+                                    <div key={log._id || i} style={{
+                                        background: 'rgba(255,255,255,0.03)',
+                                        border: '1px solid rgba(255,255,255,0.06)',
+                                        borderRadius: '10px',
+                                        padding: '9px 12px',
+                                        display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
+                                        gap: '8px',
+                                    }}>
+                                        <div style={{ minWidth: 0 }}>
+                                            <div style={{ color: '#e5e7eb', fontWeight: 600, fontSize: '13px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                                {log.playerName}
+                                            </div>
+                                            <div style={{ color: '#6b7280', fontSize: '11px', marginTop: '2px' }}>
+                                                Sold to <span style={{ color: '#9ca3af' }}>{log.teamName}</span>
+                                            </div>
+                                        </div>
+                                        <div style={{ color: ACCENT, fontFamily: 'monospace', fontWeight: 700, fontSize: '13px', flexShrink: 0 }}>
+                                            ₹{log.finalPrice?.toLocaleString()}
+                                        </div>
                                     </div>
-                                    <div className="text-sm font-mono font-bold text-primary">₹{log.finalPrice?.toLocaleString()}</div>
-                                </div>
-                            ))
+                                ))}
+                            </div>
                         )}
                     </div>
 
-                    {/* Status indicator */}
+                    {/* Auction status */}
                     {player && (
-                        <div className="px-5 py-4 border-t border-white/10">
-                            <div className="text-gray-500 text-xs uppercase tracking-widest mb-2 font-oswald">Status</div>
-                            <div className={`text-xl font-bold ${status.status === 'paused' ? 'text-yellow-400' : 'text-green-400 animate-pulse'}`}>
+                        <div style={{ padding: '14px 20px', borderTop: '1px solid rgba(255,255,255,0.06)', flexShrink: 0 }}>
+                            <div style={{ color: '#4b5563', fontSize: '10px', fontFamily: 'Oswald, sans-serif', textTransform: 'uppercase', letterSpacing: '0.22em', marginBottom: '6px' }}>
+                                Auction Status
+                            </div>
+                            <div
+                                className={status.status !== 'paused' ? 'animate-pulse' : ''}
+                                style={{
+                                    fontFamily: 'Oswald, sans-serif',
+                                    fontWeight: 800,
+                                    letterSpacing: '0.06em',
+                                    fontSize: '22px',
+                                    color: status.status === 'paused' ? '#f59e0b' : '#22c55e',
+                                }}
+                            >
                                 {status.status === 'paused' ? 'PAUSED' : 'OPEN FOR BIDS'}
                             </div>
                         </div>
                     )}
                 </div>
-            </div>
-
-            {/* BOTTOM TICKER - TEAMS */}
-            <div className="h-24 bg-[#111] border-t border-white/10 flex items-center overflow-x-auto whitespace-nowrap px-4 scrollbar-hide">
-                <style>{`
-                    .scrollbar-hide::-webkit-scrollbar { display: none; }
-                    .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-                `}</style>
-                {teams.map(team => (
-                    <div key={team._id} className="inline-flex items-center gap-4 bg-white/5 px-6 py-3 rounded-xl mx-2 border border-white/5 min-w-[280px]">
-                        <div className="w-2 h-10 rounded" style={{ backgroundColor: team.primaryColor || '#F97316' }} />
-                        <div className="flex-1">
-                            <div className="text-sm font-bold text-white truncate max-w-[140px]">{team.name}</div>
-                            <div className="text-xs text-gray-500">{team.playersCount} Players</div>
-                        </div>
-                        <div className="text-right">
-                            <div className="text-[10px] text-gray-500 uppercase tracking-wider font-oswald">Purse Left</div>
-                            <div className="text-lg font-mono font-bold text-green-400">₹{(team.budget / 100000).toFixed(2)}L</div>
-                        </div>
-                    </div>
-                ))}
             </div>
         </div>
     );

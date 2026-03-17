@@ -13,6 +13,26 @@ interface User {
     [key: string]: any;
 }
 
+export interface PlayerStats {
+    totalTournaments: number;
+    pendingCount: number;
+    approvedCount: number;
+    auctionedCount: number;
+    totalMatchesPlayed: number;
+    totalMatchesWon: number;
+    totalPointsContributed: number;
+    totalEarnings: number;
+    highestBid: number;
+}
+
+export interface OrganizerStats {
+    totalTournaments: number;
+    activeTournaments: number;
+    completedTournaments: number;
+    draftTournaments: number;
+    totalPlayersHosted: number;
+}
+
 interface AuthState {
     user: User | null;
     role: Role | null;
@@ -21,8 +41,13 @@ interface AuthState {
     error: string | null;
 
     // Registration specific state
-    registrationStep: number; // 1: details, 2: otp, 3: password
+    registrationStep: number;
     registrationEmail: string | null;
+
+    // Stats
+    playerStats: PlayerStats | null;
+    organizerStats: OrganizerStats | null;
+    statsLoading: boolean;
 }
 
 const initialState: AuthState = {
@@ -33,6 +58,9 @@ const initialState: AuthState = {
     error: null,
     registrationStep: 1,
     registrationEmail: null,
+    playerStats: null,
+    organizerStats: null,
+    statsLoading: false,
 };
 
 // --- ERROR HELPER ---
@@ -137,6 +165,49 @@ export const setPassword = createAsyncThunk(
     }
 );
 
+// Player Stats
+export const fetchPlayerStats = createAsyncThunk(
+    'auth/fetchPlayerStats',
+    async (_, { rejectWithValue }) => {
+        try {
+            const response = await API.get('/player/auth/stats');
+            return response.data?.data?.data || response.data?.data;
+        } catch (error) {
+            return rejectWithValue(extractError(error));
+        }
+    }
+);
+
+// Player Tournament History is in registrationSlice
+
+// Organizer Stats
+export const fetchOrganizerStats = createAsyncThunk(
+    'auth/fetchOrganizerStats',
+    async (_, { rejectWithValue }) => {
+        try {
+            const response = await API.get('/organizer/auth/stats');
+            return response.data?.data?.data || response.data?.data;
+        } catch (error) {
+            return rejectWithValue(extractError(error));
+        }
+    }
+);
+
+// Player Profile Image Upload
+export const uploadPlayerProfileImage = createAsyncThunk(
+    'auth/uploadPlayerProfileImage',
+    async (file: File, { rejectWithValue }) => {
+        try {
+            const formData = new FormData();
+            formData.append('image', file);
+            const response = await API.put('/player/auth/profile-image', formData);
+            return response.data?.data?.data || response.data?.data;
+        } catch (error) {
+            return rejectWithValue(extractError(error));
+        }
+    }
+);
+
 // Profile Update
 export const updateProfile = createAsyncThunk(
     'auth/updateProfile',
@@ -232,6 +303,26 @@ export const authSlice = createSlice({
             }
         });
         builder.addCase(updateProfile.rejected, (state, action) => { state.isLoading = false; state.error = action.payload as string; });
+
+        // PLAYER STATS
+        builder.addCase(fetchPlayerStats.pending,    (state) => { state.statsLoading = true; });
+        builder.addCase(fetchPlayerStats.fulfilled,  (state, action) => { state.statsLoading = false; state.playerStats = action.payload; });
+        builder.addCase(fetchPlayerStats.rejected,   (state) => { state.statsLoading = false; });
+
+        // ORGANIZER STATS
+        builder.addCase(fetchOrganizerStats.pending,    (state) => { state.statsLoading = true; });
+        builder.addCase(fetchOrganizerStats.fulfilled,  (state, action) => { state.statsLoading = false; state.organizerStats = action.payload; });
+        builder.addCase(fetchOrganizerStats.rejected,   (state) => { state.statsLoading = false; });
+
+        // UPLOAD PLAYER PROFILE IMAGE
+        builder.addCase(uploadPlayerProfileImage.pending, (state) => { state.isLoading = true; state.error = null; });
+        builder.addCase(uploadPlayerProfileImage.fulfilled, (state, action) => {
+            state.isLoading = false;
+            if (state.user && action.payload) {
+                state.user = { ...state.user, ...action.payload };
+            }
+        });
+        builder.addCase(uploadPlayerProfileImage.rejected, (state, action) => { state.isLoading = false; state.error = action.payload as string; });
 
         // FETCH PROFILE (rehydrate on refresh)
         builder.addCase(fetchProfile.pending, (state) => { state.isLoading = true; state.error = null; });

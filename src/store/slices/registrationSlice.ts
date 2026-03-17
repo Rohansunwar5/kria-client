@@ -41,6 +41,11 @@ export interface Registration {
         soldPrice?: number;
         auctionedAt?: string;
     };
+    stats?: {
+        matchesPlayed: number;
+        matchesWon: number;
+        pointsContributed: number;
+    };
     categoryDetails?: Category;
     tournamentDetails?: any;
     profile?: {
@@ -53,11 +58,25 @@ export interface Registration {
     };
 }
 
+export interface TournamentHistoryEntry {
+    _id: string;
+    status: string;
+    profile?: { skillLevel?: string; age?: number; gender?: string };
+    auctionData?: { basePrice?: number; soldPrice?: number; auctionedAt?: string };
+    stats?: { matchesPlayed: number; matchesWon: number; pointsContributed: number };
+    tournament?: { _id: string; name: string; sport: string; startDate: string; endDate: string; status: string; venue?: { name: string; city: string } };
+    category?: { _id: string; name: string; gender: string };
+    team?: { _id: string; name: string; primaryColor?: string };
+    createdAt: string;
+}
+
 interface RegistrationState {
     categories: Category[];
     myRegistrations: Registration[];
     tournamentRegistrations: Registration[];
     categoryRegistrations: Registration[];
+    tournamentHistory: TournamentHistoryEntry[];
+    historyLoading: boolean;
     isLoading: boolean;
     error: string | null;
 }
@@ -67,6 +86,8 @@ const initialState: RegistrationState = {
     myRegistrations: [],
     tournamentRegistrations: [],
     categoryRegistrations: [],
+    tournamentHistory: [],
+    historyLoading: false,
     isLoading: false,
     error: null,
 };
@@ -128,6 +149,20 @@ export const withdrawRegistration = createAsyncThunk(
         try {
             await API.post(`/registrations/${registrationId}/withdraw`);
             return registrationId;
+        } catch (error) {
+            return rejectWithValue(extractError(error));
+        }
+    }
+);
+
+// Fetch player tournament history with enriched team/tournament/category details
+export const fetchPlayerTournamentHistory = createAsyncThunk(
+    'registration/fetchTournamentHistory',
+    async (_, { rejectWithValue }) => {
+        try {
+            const response = await API.get('/player/auth/tournament-history');
+            const data = response.data?.data?.data || response.data?.data || {};
+            return Array.isArray(data.history) ? data.history : [];
         } catch (error) {
             return rejectWithValue(extractError(error));
         }
@@ -264,6 +299,11 @@ const registrationSlice = createSlice({
             state.isLoading = false;
             state.error = action.payload as string;
         });
+
+        // TOURNAMENT HISTORY
+        builder.addCase(fetchPlayerTournamentHistory.pending,   (state) => { state.historyLoading = true; state.error = null; });
+        builder.addCase(fetchPlayerTournamentHistory.fulfilled, (state, action) => { state.historyLoading = false; state.tournamentHistory = action.payload; });
+        builder.addCase(fetchPlayerTournamentHistory.rejected,  (state, action) => { state.historyLoading = false; state.error = action.payload as string; });
 
         // FETCH BY TOURNAMENT
         builder.addCase(fetchRegistrationsByTournament.pending, (state) => {
