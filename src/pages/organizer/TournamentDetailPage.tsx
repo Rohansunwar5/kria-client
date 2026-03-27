@@ -24,6 +24,7 @@ import RegistrationsSection from './components/RegistrationsSection';
 import AuctionSection from './components/AuctionSection';
 import MatchManagementSection from './components/MatchManagementSection';
 import BracketManagementSection from './components/BracketManagementSection';
+import PaymentsSection from './components/PaymentsSection';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -37,6 +38,7 @@ type SectionKey =
     | 'settings'
     | 'categories'
     | 'registrations'
+    | 'payments'
     | 'teams'
     | 'auction'
     | 'brackets'
@@ -87,6 +89,7 @@ const NAV_GROUPS: NavGroup[] = [
         items: [
             { key: 'categories', label: 'Categories', icon: ListTree },
             { key: 'registrations', label: 'Registrations', icon: UserCheck },
+            { key: 'payments', label: 'Payments', icon: DollarSign },
         ],
     },
     {
@@ -438,7 +441,7 @@ const TournamentDetailPage = () => {
 
                 {/* ── MAIN CONTENT ───────────────────────────────────────────── */}
                 <main className="flex-1 overflow-y-auto">
-                    <div className="p-6 lg:p-10 pb-24 max-w-4xl">
+                    <div className="p-6 lg:p-10 pb-24 w-full max-w-[1600px]">
                         {renderSection()}
                     </div>
                 </main>
@@ -462,6 +465,7 @@ const TournamentDetailPage = () => {
             case 'categories': return currentTournament && id ? <CategoriesSection tournamentId={id} /> : null;
             case 'teams': return currentTournament && id ? <TeamsSection tournamentId={id} defaultBudget={currentTournament.settings?.defaultBudget || 100000} /> : null;
             case 'registrations': return currentTournament && id ? <RegistrationsSection tournamentId={id} /> : null;
+            case 'payments': return currentTournament && id ? <PaymentsSection tournamentId={id} /> : null;
             case 'auction': return currentTournament && id ? <AuctionSection tournamentId={id} categories={categories.map(c => ({ _id: c._id, name: c.name, status: c.status }))} /> : null;
             case 'brackets': return currentTournament && id ? <BracketManagementSection tournamentId={id} categories={categories.map(c => ({ _id: c._id, name: c.name, status: c.status }))} /> : null;
             case 'matches': return currentTournament && id ? <MatchManagementSection tournamentId={id} categories={categories.map(c => ({ _id: c._id, name: c.name, status: c.status }))} /> : null;

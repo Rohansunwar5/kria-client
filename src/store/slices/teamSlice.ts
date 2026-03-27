@@ -13,6 +13,7 @@ export interface Team {
         phone: string;
         email?: string;
     };
+    captainId?: string;
     whatsappGroupLink?: string;
     tournamentId: string;
     budget: number;
@@ -100,6 +101,19 @@ export const updateTeamBudget = createAsyncThunk(
     async ({ id, amount }: { id: string; amount: number }, { rejectWithValue }) => {
         try {
             const response = await API.put(`/teams/${id}/budget`, { amount });
+            const data = response.data?.data?.data || response.data?.data;
+            return data;
+        } catch (error) {
+            return rejectWithValue(extractError(error));
+        }
+    }
+);
+
+export const searchPlayerByEmail = createAsyncThunk(
+    'team/searchPlayerByEmail',
+    async (email: string, { rejectWithValue }) => {
+        try {
+            const response = await API.get(`/players/search-by-email?email=${encodeURIComponent(email)}`);
             const data = response.data?.data?.data || response.data?.data;
             return data;
         } catch (error) {

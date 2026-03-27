@@ -25,6 +25,9 @@ export interface Category {
         leagueSize: number;
         topN: number;
     };
+    isPaidRegistration: boolean;
+    registrationFee: number;
+    maxRegistrations?: number;
     status: 'setup' | 'registration' | 'auction' | 'bracket_configured' | 'ongoing' | 'completed';
     isActive: boolean;
 }

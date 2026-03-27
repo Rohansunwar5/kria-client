@@ -1,5 +1,6 @@
 import React from 'react';
 import { Calendar, Users, Trophy, MapPin, Clock, ArrowUpRight } from 'lucide-react';
+import { motion } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { Tournament } from '@/store/slices/tournamentSlice';
 
@@ -26,20 +27,20 @@ export function TournamentCard({ tournament, onClick }: TournamentCardProps) {
     const showCountdown = tournament.status === 'registration_open' && daysLeft > 0 && daysLeft <= 7;
 
     return (
-        <div
+        <motion.div
             onClick={onClick}
+            whileHover={{ y: -8, scale: 1.01 }}
+            whileTap={{ scale: 0.98 }}
             className={cn(
-                'group relative w-full rounded-2xl sm:rounded-3xl overflow-hidden cursor-pointer',
-                'bg-[#161616] border border-white/8',
-                'transition-all duration-500',
-                'hover:-translate-y-1 sm:hover:-translate-y-2',
-                'hover:border-white/20 hover:shadow-2xl hover:shadow-black/60',
-                'active:scale-[0.99]',
+                'group relative w-full rounded-[1.75rem] overflow-hidden cursor-pointer',
+                'bg-gradient-to-b from-[#1c1c1c] to-[#121212] border border-white/[0.08]',
+                'transition-shadow duration-500',
+                'hover:border-white/20 hover:shadow-2xl hover:shadow-primary/10',
                 'flex flex-col',
             )}
         >
             {/* ── Image ──────────────────────────────────────────────────── */}
-            <div className="relative h-44 sm:h-56 w-full overflow-hidden flex-shrink-0">
+            <div className="relative h-48 sm:h-64 w-full overflow-hidden flex-shrink-0">
                 {/* Gradient overlays */}
                 <div className="absolute inset-0 bg-gradient-to-t from-[#161616] via-[#161616]/20 to-transparent z-10" />
                 <div className="absolute inset-0 bg-gradient-to-r from-black/30 to-transparent z-10" />
@@ -79,12 +80,12 @@ export function TournamentCard({ tournament, onClick }: TournamentCardProps) {
                             </span>
                         </div>
                     )}
-                    <h3 className="text-base sm:text-xl font-oswald font-bold text-white tracking-wide leading-tight line-clamp-2">
+                    <h3 className="text-xl sm:text-2xl font-oswald font-bold text-white tracking-wide leading-[1.15] line-clamp-2 drop-shadow-md">
                         {tournament.name}
                     </h3>
-                    <div className="flex items-center gap-1.5 mt-1">
-                        <MapPin className="h-3 w-3 text-primary flex-shrink-0" />
-                        <span className="text-xs text-gray-300 font-medium truncate">
+                    <div className="flex items-center gap-1.5 mt-2 opacity-90">
+                        <MapPin className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                        <span className="text-xs sm:text-sm text-gray-200 font-medium truncate drop-shadow-sm">
                             {tournament.venue?.city || 'TBD'}
                         </span>
                     </div>
@@ -148,7 +149,7 @@ export function TournamentCard({ tournament, onClick }: TournamentCardProps) {
             </div>
 
             {/* Subtle primary glow on hover */}
-            <div className="absolute inset-0 rounded-2xl sm:rounded-3xl ring-1 ring-primary/0 group-hover:ring-primary/20 transition-all duration-500 pointer-events-none" />
-        </div>
+            <div className="absolute inset-0 rounded-[1.75rem] ring-1 ring-inset ring-primary/0 group-hover:ring-primary/20 transition-all duration-500 pointer-events-none" />
+        </motion.div>
     );
 }

@@ -4,16 +4,24 @@ import { useAppDispatch, useAppSelector } from '@/store/hooks';
 import { fetchPublicTournaments } from '@/store/slices/tournamentSlice';
 import { useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
+import { FilterState } from './PlayerFilterMenu';
 
-export const FeaturedTournaments = () => {
+interface FeaturedTournamentsProps {
+    filters: FilterState;
+}
+
+export const FeaturedTournaments = ({ filters }: FeaturedTournamentsProps) => {
     const dispatch = useAppDispatch();
     const navigate = useNavigate();
     const { publicTournaments, isLoading } = useAppSelector((state) => state.tournament);
 
     useEffect(() => {
-        // Fetch upcoming, registration open, and ongoing tournaments
-        dispatch(fetchPublicTournaments({ limit: 6 }));
-    }, [dispatch]);
+        dispatch(fetchPublicTournaments({ 
+            limit: 6,
+            sport: filters.sport !== 'All' ? filters.sport : undefined,
+            city: filters.city !== 'All' ? filters.city : undefined
+        }));
+    }, [dispatch, filters]);
 
     return (
         <div className="w-full max-w-7xl px-4 sm:px-8 mt-8 sm:mt-20 mb-16 sm:mb-32 flex flex-col gap-6 sm:gap-10 min-h-[400px]">

@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import SmoothScroll from '@/components/SmoothScroll';
 import { PlayerNavigation } from '@/components/PlayerNavigation';
 import HoverFooter from '@/components/HoverFooter';
+import { createPaymentOrder, verifyPayment } from '@/api/payment';
 
 // Tab sub-components
 import OverviewTab from './player-tournament/OverviewTab';
@@ -18,10 +19,11 @@ import TeamsTab from './player-tournament/TeamsTab';
 import AuctionTab from './player-tournament/AuctionTab';
 import BracketTab from './player-tournament/BracketTab';
 import LeaderboardTab from './player-tournament/LeaderboardTab';
+import AwardsTab from './player-tournament/AwardsTab';
 
-type TabKey = 'overview' | 'categories' | 'players' | 'teams' | 'auction' | 'bracket' | 'leaderboard';
+type TabKey = 'overview' | 'categories' | 'players' | 'teams' | 'auction' | 'bracket' | 'leaderboard' | 'awards';
 
-const TABS: TabKey[] = ['overview', 'categories', 'players', 'teams', 'auction', 'bracket', 'leaderboard'];
+const TABS: TabKey[] = ['overview', 'categories', 'players', 'teams', 'auction', 'bracket', 'leaderboard', 'awards'];
 
 const PlayerTournamentDetailPage = () => {
     const { id } = useParams<{ id: string }>();
@@ -37,7 +39,8 @@ const PlayerTournamentDetailPage = () => {
     const [selectedPlayerCategory, setSelectedPlayerCategory] = useState<string>('');
     const [registeringCategoryId, setRegisteringCategoryId] = useState<string | null>(null);
     const [showRegisterModal, setShowRegisterModal] = useState(false);
-    const [regForm, setRegForm] = useState({ age: '', gender: 'male', skillLevel: 'intermediate' });
+    const [regForm, setRegForm] = useState({ skillLevel: 'intermediate' });
+    const [paymentLoading, setPaymentLoading] = useState(false);
 
     // ─── Data fetching ─────────────────────────────────────────────────────────
     useEffect(() => {
@@ -84,24 +87,96 @@ const PlayerTournamentDetailPage = () => {
         setShowRegisterModal(true);
     };
 
+    const computeAge = () => {
+        if (!user?.dateOfBirth) return 0;
+        const dob = new Date(user.dateOfBirth);
+        const today = new Date();
+        let age = today.getFullYear() - dob.getFullYear();
+        const m = today.getMonth() - dob.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+        return age;
+    };
+
+    const buildProfile = () => ({
+        firstName: user!.firstName,
+        lastName: user!.lastName,
+        age: computeAge(),
+        gender: user!.gender || 'male',
+        phone: user!.phone || '',
+        skillLevel: regForm.skillLevel,
+    });
+
+    const closeRegModal = () => {
+        setShowRegisterModal(false);
+        setRegisteringCategoryId(null);
+        setRegForm({ skillLevel: 'intermediate' });
+        setPaymentLoading(false);
+    };
+
     const handleConfirmRegister = async () => {
-        if (!tournament || !user || !registeringCategoryId || !regForm.age) return;
+        if (!tournament || !user || !registeringCategoryId) return;
+
+        const selectedCategory = categories.find(c => c._id === registeringCategoryId);
+
+        // ── Paid category → Razorpay flow ──
+        if (selectedCategory?.isPaidRegistration) {
+            setPaymentLoading(true);
+            try {
+                const order = await createPaymentOrder({
+                    tournamentId: tournament._id,
+                    categoryId: registeringCategoryId,
+                });
+
+                const options = {
+                    key: order.keyId,
+                    amount: Math.round(order.amount * 100),
+                    currency: order.currency,
+                    name: 'Kria Sports',
+                    description: `Registration: ${selectedCategory.name}`,
+                    order_id: order.orderId,
+                    handler: async (response: { razorpay_order_id: string; razorpay_payment_id: string; razorpay_signature: string }) => {
+                        try {
+                            const result = await verifyPayment({
+                                razorpayOrderId: response.razorpay_order_id,
+                                razorpayPaymentId: response.razorpay_payment_id,
+                                razorpaySignature: response.razorpay_signature,
+                                profile: buildProfile(),
+                            });
+                            // Add the new registration to Redux state
+                            if (result?.registration) {
+                                dispatch(fetchMyRegistrations());
+                            }
+                            closeRegModal();
+                        } catch {
+                            setPaymentLoading(false);
+                        }
+                    },
+                    modal: {
+                        ondismiss: () => setPaymentLoading(false),
+                    },
+                    prefill: {
+                        name: `${user.firstName} ${user.lastName}`,
+                        contact: user.phone || '',
+                    },
+                    theme: { color: '#F97316' },
+                };
+
+                const rzp = new (window as any).Razorpay(options);
+                rzp.open();
+            } catch {
+                setPaymentLoading(false);
+            }
+            return;
+        }
+
+        // ── Free category → direct registration ──
         const result = await dispatch(registerForCategory({
             tournamentId: tournament._id,
             categoryId: registeringCategoryId,
-            profile: {
-                firstName: user.firstName,
-                lastName: user.lastName,
-                age: parseInt(regForm.age),
-                gender: regForm.gender,
-                phone: user.phone || '',
-                skillLevel: regForm.skillLevel,
-            },
+            profile: buildProfile(),
         }));
         if (registerForCategory.fulfilled.match(result)) {
-            setShowRegisterModal(false);
-            setRegisteringCategoryId(null);
-            setRegForm({ age: '', gender: 'male', skillLevel: 'intermediate' });
+            closeRegModal();
         }
     };
 
@@ -260,6 +335,9 @@ const PlayerTournamentDetailPage = () => {
                                     sport={tournament.sport}
                                 />
                             )}
+                            {activeTab === 'awards' && tournament && (
+                                <AwardsTab awards={tournament.awards || []} />
+                            )}
                         </div>
 
                         {/* ── Sidebar ── */}
@@ -315,35 +393,64 @@ const PlayerTournamentDetailPage = () => {
                     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
                         <div className="bg-[#1a1a1a] border border-white/10 p-8 rounded-3xl w-full max-w-md shadow-2xl relative">
                             <h3 className="text-2xl font-oswald font-bold mb-6">Complete Registration</h3>
+                            {(() => {
+                                const selectedCategory = categories.find(c => c._id === registeringCategoryId);
+                                if (!selectedCategory?.isPaidRegistration) return null;
+                                const base = selectedCategory.registrationFee;
+                                const razorpayFee = Math.round(base * 0.02 * 100) / 100;
+                                const platformFee = Math.round(base * 0.02 * 100) / 100;
+                                const gst = Math.round((razorpayFee + platformFee) * 0.18 * 100) / 100;
+                                const convenienceFee = Math.round((razorpayFee + platformFee + gst) * 100) / 100;
+                                const total = Math.round((base + convenienceFee) * 100) / 100;
+                                return (
+                                    <div className="mb-4 p-4 bg-primary/10 border border-primary/30 rounded-xl">
+                                        <p className="text-primary font-semibold text-sm mb-3">Payment Summary</p>
+                                        <div className="space-y-2 text-sm">
+                                            <div className="flex justify-between text-gray-300">
+                                                <span>Registration Fee</span>
+                                                <span className="font-mono">₹{base.toFixed(2)}</span>
+                                            </div>
+                                            <div className="flex justify-between text-gray-400">
+                                                <span>Convenience Fee <span className="text-[10px] text-gray-500">(incl. GST)</span></span>
+                                                <span className="font-mono">₹{convenienceFee.toFixed(2)}</span>
+                                            </div>
+                                            <div className="h-px bg-white/10 my-1" />
+                                            <div className="flex justify-between text-white font-bold">
+                                                <span>Total</span>
+                                                <span className="font-mono text-primary">₹{total.toFixed(2)}</span>
+                                            </div>
+                                        </div>
+                                        <p className="text-xs text-gray-500 mt-2">Payment secured via Razorpay.</p>
+                                    </div>
+                                );
+                            })()}
+                            {(!user?.gender || !user?.dateOfBirth) && (
+                                <div className="mb-4 p-3 bg-yellow-500/10 border border-yellow-500/30 rounded-xl text-yellow-400 text-sm">
+                                    Please update your <span className="font-bold underline cursor-pointer" onClick={() => { closeRegModal(); navigate('/player/profile'); }}>profile</span> with your gender and date of birth before registering.
+                                </div>
+                            )}
                             <div className="space-y-4">
                                 <div className="space-y-2">
                                     <label className="text-sm text-gray-400">Player Name</label>
                                     <div className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-gray-300">
                                         {user?.firstName} {user?.lastName}
                                     </div>
-                                    <p className="text-xs text-primary/80">Name is synced with your profile.</p>
                                 </div>
-                                <div className="space-y-2">
-                                    <label className="text-sm text-gray-400">Age *</label>
-                                    <input
-                                        type="number" min="1"
-                                        value={regForm.age}
-                                        onChange={e => setRegForm({ ...regForm, age: e.target.value })}
-                                        className="w-full px-4 py-3 rounded-xl bg-black/50 border border-white/10 text-white focus:outline-none focus:border-primary transition-colors"
-                                        placeholder="Enter your age"
-                                    />
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="text-sm text-gray-400">Age</label>
+                                        <div className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-gray-300">
+                                            {user?.dateOfBirth ? computeAge() : '—'}
+                                        </div>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-sm text-gray-400">Gender</label>
+                                        <div className="px-4 py-3 bg-white/5 border border-white/10 rounded-xl text-gray-300 capitalize">
+                                            {user?.gender || '—'}
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="space-y-2">
-                                    <label className="text-sm text-gray-400">Gender *</label>
-                                    <select
-                                        value={regForm.gender}
-                                        onChange={e => setRegForm({ ...regForm, gender: e.target.value })}
-                                        className="w-full px-4 py-3 rounded-xl bg-black/50 border border-white/10 text-white focus:outline-none focus:border-primary transition-colors"
-                                    >
-                                        <option value="male">Male</option>
-                                        <option value="female">Female</option>
-                                    </select>
-                                </div>
+                                <p className="text-xs text-primary/80 -mt-2">Synced from your profile.</p>
                                 <div className="space-y-2">
                                     <label className="text-sm text-gray-400">Skill Level</label>
                                     <select
@@ -362,15 +469,22 @@ const PlayerTournamentDetailPage = () => {
                                 <div className="mt-4 p-3 bg-red-500/10 border border-red-500/30 text-red-500 text-sm rounded-xl">{regError}</div>
                             )}
                             <div className="flex justify-end gap-3 mt-8">
-                                <button onClick={() => setShowRegisterModal(false)} className="px-5 py-2.5 rounded-xl border border-white/10 text-white hover:bg-white/5 transition-colors font-medium">
+                                <button onClick={closeRegModal} className="px-5 py-2.5 rounded-xl border border-white/10 text-white hover:bg-white/5 transition-colors font-medium">
                                     Cancel
                                 </button>
                                 <button
                                     onClick={handleConfirmRegister}
-                                    disabled={isRegLoading || !regForm.age}
+                                    disabled={isRegLoading || paymentLoading || !user?.gender || !user?.dateOfBirth}
                                     className="px-6 py-2.5 rounded-xl bg-primary hover:bg-primary/90 text-white font-bold transition-colors disabled:opacity-50 flex items-center gap-2"
                                 >
-                                    {isRegLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Submit
+                                    {(isRegLoading || paymentLoading) ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+                                    {(() => {
+                                        const cat = categories.find(c => c._id === registeringCategoryId);
+                                        if (!cat?.isPaidRegistration) return 'Submit';
+                                        const b = cat.registrationFee;
+                                        const fees = Math.round((b * 0.02 + b * 0.02) * 1.18 * 100) / 100;
+                                        return `Pay ₹${(b + fees).toFixed(2)} & Register`;
+                                    })()}
                                 </button>
                             </div>
                         </div>

@@ -28,10 +28,10 @@ export interface Tournament {
         allowLateRegistration: boolean;
     };
     isActive: boolean;
-    createdAt: string;
     updatedAt: string;
     registeredPlayersCount?: number;
     teamsCount?: number;
+    awards?: any[];
 }
 
 interface TournamentState {

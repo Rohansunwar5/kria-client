@@ -10,6 +10,10 @@ import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { logout, updateProfile, fetchPlayerStats, uploadPlayerProfileImage } from '../store/slices/authSlice';
 import { fetchMyRegistrations, withdrawRegistration, fetchPlayerTournamentHistory, TournamentHistoryEntry } from '../store/slices/registrationSlice';
 import { Badge } from '@/components/ui/badge';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { format, parse } from 'date-fns';
+import { getMyPayments } from '@/api/payment';
 
 // ─── Dashboard card ──────────────────────────────────────────────────────────
 const DashboardCard = ({ icon: Icon, title, onClick }: { icon: any; title: string; onClick?: () => void }) => (
@@ -77,8 +81,10 @@ const PlayerProfilePage = () => {
     const { myRegistrations, isLoading: isRegLoading, tournamentHistory, historyLoading } = useAppSelector(s => s.registration);
 
     const [isEditing, setIsEditing] = useState(false);
-    const [editData,  setEditData]  = useState({ firstName: '', lastName: '', phone: '', sport: '', location: '' });
-    const [activeView, setActiveView] = useState<'dashboard' | 'registrations' | 'history'>('dashboard');
+    const [editData,  setEditData]  = useState({ firstName: '', lastName: '', phone: '', gender: '', dateOfBirth: '', sport: '', location: '' });
+    const [activeView, setActiveView] = useState<'dashboard' | 'registrations' | 'history' | 'invoices'>('dashboard');
+    const [invoices, setInvoices]     = useState<any[]>([]);
+    const [invoicesLoading, setInvoicesLoading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -98,6 +104,10 @@ const PlayerProfilePage = () => {
         if (activeView === 'history' && tournamentHistory.length === 0) {
             dispatch(fetchPlayerTournamentHistory());
         }
+        if (activeView === 'invoices' && invoices.length === 0) {
+            setInvoicesLoading(true);
+            getMyPayments().then(data => setInvoices(data || [])).catch(() => {}).finally(() => setInvoicesLoading(false));
+        }
     }, [activeView, dispatch]);
 
     const handleLogout = () => { dispatch(logout()); navigate('/login'); };
@@ -107,6 +117,8 @@ const PlayerProfilePage = () => {
             firstName: user?.firstName || '',
             lastName:  user?.lastName  || '',
             phone:     user?.phone     || '',
+            gender:    user?.gender    || '',
+            dateOfBirth: user?.dateOfBirth ? new Date(user.dateOfBirth).toISOString().split('T')[0] : '',
             sport:     user?.sport     || '',
             location:  user?.location  || '',
         });
@@ -206,8 +218,55 @@ const PlayerProfilePage = () => {
                                     { key: 'firstName', placeholder: 'First Name' },
                                     { key: 'lastName',  placeholder: 'Last Name'  },
                                     { key: 'phone',     placeholder: 'Phone'      },
-                                    { key: 'sport',     placeholder: 'Sport (e.g. Badminton)' },
-                                    { key: 'location',  placeholder: 'Location (e.g. Bangalore)' },
+                                ].map(({ key, placeholder }) => (
+                                    <input
+                                        key={key}
+                                        value={(editData as any)[key]}
+                                        onChange={e => setEditData(p => ({ ...p, [key]: e.target.value }))}
+                                        placeholder={placeholder}
+                                        className="w-full px-4 py-2.5 rounded-full bg-black/50 border border-white/10 text-white text-center focus:outline-none focus:border-primary text-sm"
+                                    />
+                                ))}
+                                <select
+                                    value={(editData as any).gender}
+                                    onChange={e => setEditData(p => ({ ...p, gender: e.target.value }))}
+                                    className="w-full px-4 py-2.5 rounded-full bg-black/50 border border-white/10 text-white text-center focus:outline-none focus:border-primary text-sm appearance-none"
+                                >
+                                    <option value="">Select Gender</option>
+                                    <option value="male">Male</option>
+                                    <option value="female">Female</option>
+                                </select>
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <button
+                                            type="button"
+                                            className="w-full px-4 py-2.5 rounded-full bg-black/50 border border-white/10 text-white text-center focus:outline-none focus:border-primary text-sm hover:bg-black/70 transition-colors"
+                                        >
+                                            {editData.dateOfBirth
+                                                ? format(parse(editData.dateOfBirth, 'yyyy-MM-dd', new Date()), 'dd MMM yyyy')
+                                                : <span className="text-gray-500">Select Date of Birth</span>}
+                                        </button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-auto p-0" align="center">
+                                        <Calendar
+                                            mode="single"
+                                            selected={editData.dateOfBirth ? parse(editData.dateOfBirth, 'yyyy-MM-dd', new Date()) : undefined}
+                                            onSelect={(date) => {
+                                                if (date) {
+                                                    setEditData(p => ({ ...p, dateOfBirth: format(date, 'yyyy-MM-dd') }));
+                                                }
+                                            }}
+                                            disabled={(date) => date > new Date()}
+                                            defaultMonth={editData.dateOfBirth ? parse(editData.dateOfBirth, 'yyyy-MM-dd', new Date()) : new Date(2000, 0)}
+                                            captionLayout="dropdown-buttons"
+                                            fromYear={1950}
+                                            toYear={new Date().getFullYear()}
+                                        />
+                                    </PopoverContent>
+                                </Popover>
+                                {[
+                                    { key: 'sport',    placeholder: 'Sport (e.g. Badminton)' },
+                                    { key: 'location', placeholder: 'Location (e.g. Bangalore)' },
                                 ].map(({ key, placeholder }) => (
                                     <input
                                         key={key}
@@ -274,11 +333,28 @@ const PlayerProfilePage = () => {
                         </div>
                     )}
 
+                    {/* ── Titles ─────────────────────────────────────────────── */}
+                    {user?.titles && user.titles.length > 0 && (
+                        <div className="flex flex-col gap-3 mt-6">
+                            <span className="text-sm uppercase tracking-wider font-oswald text-gray-400">Honors & Titles</span>
+                            <div className="flex flex-col gap-2">
+                                {user.titles.map((t: string, idx: number) => (
+                                    <div key={idx} className="flex items-center gap-3 bg-gradient-to-r from-primary/20 to-transparent border border-primary/30 p-3 rounded-xl shadow-inner shadow-primary/10">
+                                        <Award className="h-5 w-5 text-primary shrink-0" />
+                                        <span className="text-sm font-semibold text-white tracking-wide">{t}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
                     <div className="h-px w-full bg-white/10 my-6" />
 
                     {/* ── Profile fields ────────────────────────────────────── */}
                     <div className="flex flex-col gap-4">
                         <StatField label="Mobile" value={user?.phone || '—'} />
+                        <StatField label="Gender" value={user?.gender ? user.gender.charAt(0).toUpperCase() + user.gender.slice(1) : '—'} />
+                        <StatField label="Date of Birth" value={user?.dateOfBirth ? new Date(user.dateOfBirth).toLocaleDateString() : '—'} />
                         <StatField label="Sport"  value={user?.sport || '—'} />
                         <StatField label="Location" value={user?.location || '—'} />
                     </div>
@@ -288,7 +364,7 @@ const PlayerProfilePage = () => {
                 <div className="w-full flex flex-col gap-6">
                     {/* Tabs */}
                     <div className="flex gap-2 p-1.5 bg-white/5 border border-white/10 rounded-2xl w-fit flex-wrap">
-                        {(['dashboard', 'registrations', 'history'] as const).map(tab => (
+                        {(['dashboard', 'registrations', 'history', 'invoices'] as const).map(tab => (
                             <button
                                 key={tab}
                                 onClick={() => setActiveView(tab)}
@@ -298,7 +374,7 @@ const PlayerProfilePage = () => {
                                         : 'text-gray-400 hover:text-white hover:bg-white/5'
                                 }`}
                             >
-                                {tab === 'history' ? 'Tournament History' : tab === 'registrations' ? 'My Registrations' : 'Dashboard'}
+                                {tab === 'history' ? 'Tournament History' : tab === 'registrations' ? 'My Registrations' : tab === 'invoices' ? 'Invoices' : 'Dashboard'}
                             </button>
                         ))}
                     </div>
@@ -309,7 +385,7 @@ const PlayerProfilePage = () => {
                             <DashboardCard icon={CalendarCheck} title="My Events"         onClick={() => setActiveView('registrations')} />
                             <DashboardCard icon={Trophy}        title="History"            onClick={() => setActiveView('history')} />
                             <DashboardCard icon={Bookmark}      title="Saved" />
-                            <DashboardCard icon={FileText}      title="Invoice" />
+                            <DashboardCard icon={FileText}      title="Invoice"            onClick={() => setActiveView('invoices')} />
                             <DashboardCard icon={Users}         title="My Team" />
                             <DashboardCard icon={Newspaper}     title="My News" />
                             <DashboardCard icon={User}          title="Profile"            onClick={startEditing} />
@@ -365,6 +441,64 @@ const PlayerProfilePage = () => {
                                             </div>
                                         </div>
                                     ))}
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {/* ── Invoices ──────────────────────────────────────── */}
+                    {activeView === 'invoices' && (
+                        <div className="flex flex-col gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                            <h3 className="text-2xl font-oswald font-bold tracking-wide">Payment Invoices</h3>
+
+                            {invoicesLoading ? (
+                                <div className="flex justify-center py-10">
+                                    <Loader2 className="h-8 w-8 text-primary animate-spin" />
+                                </div>
+                            ) : invoices.length === 0 ? (
+                                <EmptyState icon={IndianRupee} message="No payments made yet." cta="Find Tournaments" onCta={() => navigate('/player/home')} />
+                            ) : (
+                                <div className="flex flex-col gap-4">
+                                    {invoices.map((inv: any) => (
+                                        <div key={inv._id} className="bg-white/5 border border-white/10 rounded-2xl p-6 hover:border-white/20 transition-colors">
+                                            <div className="flex flex-col md:flex-row justify-between gap-4">
+                                                <div className="flex flex-col gap-2 flex-1 min-w-0">
+                                                    <h4 className="text-lg font-bold font-oswald tracking-wide text-white truncate">
+                                                        {inv.tournament?.name || 'Tournament'}
+                                                    </h4>
+                                                    <div className="flex flex-wrap items-center gap-3 text-sm text-gray-400">
+                                                        {inv.category?.name && <span>Category: {inv.category.name}</span>}
+                                                        <span className="text-gray-600">|</span>
+                                                        <span>Order: {inv.razorpayOrderId}</span>
+                                                    </div>
+                                                    <div className="flex items-center gap-2 mt-1">
+                                                        <Badge variant="outline" className="px-2 py-0.5 text-[10px] uppercase font-bold text-emerald-400 border-emerald-400/20 bg-emerald-400/10">
+                                                            {inv.status}
+                                                        </Badge>
+                                                        <span className="text-xs text-gray-500">
+                                                            {new Date(inv.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                                                        </span>
+                                                    </div>
+                                                </div>
+                                                <div className="flex flex-col items-end justify-center shrink-0">
+                                                    <span className="text-[10px] text-gray-500 uppercase tracking-wider font-oswald">Amount Paid</span>
+                                                    <span className="text-2xl font-mono font-black text-primary">
+                                                        ₹{inv.amount?.toLocaleString()}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+
+                                    {/* Total */}
+                                    <div className="flex justify-end pt-4 border-t border-white/10">
+                                        <div className="flex items-center gap-3 bg-primary/10 border border-primary/30 rounded-xl px-6 py-3">
+                                            <span className="text-sm font-oswald uppercase tracking-wider text-gray-300">Total Paid</span>
+                                            <span className="text-2xl font-mono font-black text-primary">
+                                                ₹{invoices.reduce((s, i) => s + (i.amount || 0), 0).toLocaleString()}
+                                            </span>
+                                        </div>
+                                    </div>
                                 </div>
                             )}
                         </div>

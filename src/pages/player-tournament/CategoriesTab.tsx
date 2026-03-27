@@ -48,11 +48,13 @@ const CategoriesTab: React.FC<Props> = ({ categories, myRegistrations, tournamen
                                 </div>
                                 <div className="flex flex-col gap-1 p-3 bg-black/20 rounded-xl">
                                     <span className="text-gray-500 text-xs uppercase tracking-wider">Max Participants</span>
-                                    <span className="font-medium text-white">{category.maxParticipants || 'Unlimited'}</span>
+                                    <span className="font-medium text-white">{category.maxRegistrations || 'Unlimited'}</span>
                                 </div>
                                 <div className="flex flex-col gap-1 p-3 bg-black/20 rounded-xl">
                                     <span className="text-gray-500 text-xs uppercase tracking-wider">Reg. Fee</span>
-                                    <span className="font-medium text-emerald-400">₹{category.registrationFee}</span>
+                                    <span className={`font-medium ${category.isPaidRegistration ? 'text-primary' : 'text-emerald-400'}`}>
+                                        {category.isPaidRegistration ? `₹${category.registrationFee}` : 'Free'}
+                                    </span>
                                 </div>
                             </div>
                             <div className="mt-4 pt-4 border-t border-white/10 flex items-center justify-between">
@@ -68,7 +70,7 @@ const CategoriesTab: React.FC<Props> = ({ categories, myRegistrations, tournamen
                                     >
                                         {registeringCategoryId === category._id && isRegLoading
                                             ? <Loader2 className="h-5 w-5 animate-spin" />
-                                            : 'Register Now'}
+                                            : category.isPaidRegistration ? `Pay ₹${category.registrationFee}+ & Register` : 'Register Now'}
                                     </button>
                                 ) : (
                                     <button disabled className="w-full py-2.5 bg-gray-500/20 text-gray-400 font-bold rounded-xl cursor-not-allowed">

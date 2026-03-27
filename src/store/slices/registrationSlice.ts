@@ -12,6 +12,8 @@ export interface Category {
     maxAge?: number;
     gender: 'Male' | 'Female' | 'Mixed' | 'Any';
     maxParticipants: number;
+    maxRegistrations?: number;
+    isPaidRegistration: boolean;
     registrationFee: number;
     status: 'draft' | 'registration_open' | 'registration_closed' | 'auction_in_progress' | 'ongoing' | 'completed';
     bracketType?: 'knockout' | 'round_robin' | 'group_knockout';

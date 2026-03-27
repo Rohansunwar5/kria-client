@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Layers, Plus, Trash2, Edit2, Loader2, Save, X, DoorOpen, Lock, Gavel, Play, CheckCircle } from 'lucide-react';
+import { Layers, Plus, Trash2, Edit2, Loader2, Save, X, DoorOpen, Lock, Gavel, Play, CheckCircle, Trophy, IndianRupee } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '../../../store/hooks';
 import {
     fetchTournamentCategories,
@@ -13,6 +13,7 @@ import {
 } from '../../../store/slices/categorySlice';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import CategoryAnalyticsModal from './CategoryAnalyticsModal';
 
 const statusColors: Record<string, { bg: string; text: string; border: string; label: string }> = {
     setup: { bg: 'bg-gray-500/10', text: 'text-gray-400', border: 'border-gray-500/30', label: 'Setup' },
@@ -30,13 +31,20 @@ export default function CategoriesSection({ tournamentId }: { tournamentId: stri
     const [isCreating, setIsCreating] = useState(false);
     const [editingId, setEditingId] = useState<string | null>(null);
 
+    // Analytics state
+    const [isAnalyticsOpen, setIsAnalyticsOpen] = useState(false);
+    const [analyticsCategory, setAnalyticsCategory] = useState<any>(null);
+
     const initialFormState = {
         name: '', description: '', gender: 'male',
         ageGroup: { label: '', min: '', max: '' },
         matchType: 'singles',
         matchFormat: { bestOf: 3, pointsPerGame: 21, tieBreakPoints: '' },
         bracketType: 'knockout',
-        hybridConfig: { leagueSize: 4, topN: 2 }
+        hybridConfig: { leagueSize: 4, topN: 2 },
+        isPaidRegistration: false,
+        registrationFee: '',
+        maxRegistrations: '',
     };
 
     const [formData, setFormData] = useState(initialFormState);
@@ -89,6 +97,18 @@ export default function CategoriesSection({ tournamentId }: { tournamentId: stri
             delete payload.hybridConfig;
         }
 
+        // Clean up registration fee
+        if (!payload.isPaidRegistration) {
+            payload.registrationFee = 0;
+        } else if (payload.registrationFee === '') {
+            delete payload.registrationFee;
+        }
+
+        // Clean up maxRegistrations
+        if (payload.maxRegistrations === '' || payload.maxRegistrations === null) {
+            delete payload.maxRegistrations;
+        }
+
         return payload;
     };
 
@@ -134,10 +154,18 @@ export default function CategoriesSection({ tournamentId }: { tournamentId: stri
             hybridConfig: {
                 leagueSize: category.hybridConfig?.leagueSize || 4,
                 topN: category.hybridConfig?.topN || 2
-            }
+            },
+            isPaidRegistration: category.isPaidRegistration || false,
+            registrationFee: category.registrationFee || '',
+            maxRegistrations: category.maxRegistrations ?? '',
         });
         setEditingId(category._id);
         setIsCreating(false);
+    };
+
+    const openAnalytics = (category: any) => {
+        setAnalyticsCategory(category);
+        setIsAnalyticsOpen(true);
     };
 
     const handleDelete = async (id: string) => {
@@ -275,6 +303,59 @@ export default function CategoriesSection({ tournamentId }: { tournamentId: stri
                                 )}
                             </div>
                         </div>
+
+                        {/* Registration Limits */}
+                        <div className="space-y-4 p-4 bg-white/5 border border-white/10 rounded-xl">
+                            <h4 className="text-sm font-semibold text-primary uppercase tracking-wider mb-2">Registration Limit</h4>
+                            <div className="space-y-2">
+                                <Label className="text-gray-400">Max Registrations (optional)</Label>
+                                <Input
+                                    name="maxRegistrations"
+                                    type="number"
+                                    min="1"
+                                    placeholder="Unlimited"
+                                    value={formData.maxRegistrations}
+                                    onChange={handleInputChange}
+                                    className="bg-black/50 border-white/10 text-white"
+                                />
+                                <p className="text-xs text-gray-500">Leave empty for unlimited registrations.</p>
+                            </div>
+                        </div>
+
+                        {/* Registration Fee */}
+                        <div className="space-y-4 p-4 bg-white/5 border border-white/10 rounded-xl">
+                            <h4 className="text-sm font-semibold text-primary uppercase tracking-wider mb-2">Registration Fee</h4>
+                            <div className="flex items-center gap-4">
+                                <label className="flex items-center gap-3 cursor-pointer select-none">
+                                    <div
+                                        onClick={() => setFormData(prev => ({ ...prev, isPaidRegistration: !prev.isPaidRegistration, registrationFee: !prev.isPaidRegistration ? prev.registrationFee : '' }))}
+                                        className={`relative w-11 h-6 rounded-full transition-colors ${formData.isPaidRegistration ? 'bg-primary' : 'bg-white/20'}`}
+                                    >
+                                        <div className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform ${formData.isPaidRegistration ? 'translate-x-5' : ''}`} />
+                                    </div>
+                                    <span className="text-gray-300 text-sm font-medium">
+                                        {formData.isPaidRegistration ? 'Paid Registration' : 'Free Registration'}
+                                    </span>
+                                </label>
+                            </div>
+                            {formData.isPaidRegistration && (
+                                <div className="space-y-2 max-w-xs animate-in fade-in">
+                                    <Label className="text-gray-400">Fee Amount (₹) *</Label>
+                                    <div className="relative">
+                                        <IndianRupee className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-500" />
+                                        <Input
+                                            name="registrationFee"
+                                            type="number"
+                                            min="1"
+                                            placeholder="e.g. 500"
+                                            value={formData.registrationFee}
+                                            onChange={handleInputChange}
+                                            className="bg-black/50 border-white/10 text-white pl-9"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     <div className="flex justify-end mt-6 gap-3 pt-4 border-t border-white/10">
@@ -340,6 +421,18 @@ export default function CategoriesSection({ tournamentId }: { tournamentId: stri
                                         <span className="block text-xs uppercase opacity-70 mb-1">Match Format</span>
                                         <span className="text-white font-medium">BO{category.matchFormat?.bestOf}, {category.matchFormat?.pointsPerGame} pts</span>
                                     </div>
+                                    <div>
+                                        <span className="block text-xs uppercase opacity-70 mb-1">Reg. Fee</span>
+                                        <span className={`font-medium ${category.isPaidRegistration ? 'text-primary' : 'text-emerald-400'}`}>
+                                            {category.isPaidRegistration ? `₹${category.registrationFee}` : 'Free'}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <span className="block text-xs uppercase opacity-70 mb-1">Max Slots</span>
+                                        <span className="text-white font-medium">
+                                            {category.maxRegistrations ? category.maxRegistrations : 'Unlimited'}
+                                        </span>
+                                    </div>
                                 </div>
 
                                 {/* Status actions and management */}
@@ -350,6 +443,7 @@ export default function CategoriesSection({ tournamentId }: { tournamentId: stri
                                         {category.status === 'registration' && <button onClick={() => handleStatusAction(category._id, startCategoryAuction, { id: category._id, tournamentId })} className="p-2 bg-blue-500/10 text-blue-500 hover:bg-blue-500/20 rounded" title="Start Auction"><Gavel className="h-4 w-4" /></button>}
                                         {category.status === 'auction' && <button onClick={() => handleStatusAction(category._id, startCategory)} className="p-2 bg-primary/10 text-primary hover:bg-primary/20 rounded" title="Start Playing"><Play className="h-4 w-4" /></button>}
                                         {category.status === 'ongoing' && <button onClick={() => handleStatusAction(category._id, completeCategory)} className="p-2 bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 rounded" title="Complete"><CheckCircle className="h-4 w-4" /></button>}
+                                        {category.status === 'completed' && <button onClick={() => openAnalytics(category)} className="p-2 bg-purple-500/10 text-purple-400 hover:bg-purple-500/20 border border-purple-500/20 rounded tooltip-trigger flex items-center gap-1.5" title="Analytics & Awards"><Trophy className="h-4 w-4" /> <span className="text-xs font-semibold uppercase pr-1">Awards</span></button>}
                                     </div>
 
                                     <div className="flex gap-2">
@@ -362,6 +456,13 @@ export default function CategoriesSection({ tournamentId }: { tournamentId: stri
                     })}
                 </div>
             )}
+
+            <CategoryAnalyticsModal 
+                isOpen={isAnalyticsOpen} 
+                onClose={() => setIsAnalyticsOpen(false)} 
+                category={analyticsCategory} 
+                tournamentId={tournamentId} 
+            />
         </section>
     );
 }

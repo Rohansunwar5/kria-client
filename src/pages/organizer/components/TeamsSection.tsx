@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Users, Plus, Trash2, Edit2, Loader2, Save, X, DollarSign, RefreshCw, Smartphone, Mail, Phone, ExternalLink } from 'lucide-react';
+import { Users, Plus, Trash2, Edit2, Loader2, Save, X, DollarSign, RefreshCw, Smartphone, Mail, Phone, ExternalLink, Search, Shield, XCircle } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '../../../store/hooks';
-import { fetchTournamentTeams, createTeam, updateTeam, deleteTeam, updateTeamBudget, resetTeamBudget, clearTeams } from '../../../store/slices/teamSlice';
+import { fetchTournamentTeams, createTeam, updateTeam, deleteTeam, updateTeamBudget, resetTeamBudget, clearTeams, searchPlayerByEmail } from '../../../store/slices/teamSlice';
 import { Input } from '@/components/ui/input';
 
 interface TeamsSectionProps {
@@ -22,6 +22,18 @@ const TeamsSection: React.FC<TeamsSectionProps> = ({ tournamentId, defaultBudget
         initialBudget: defaultBudget,
     });
 
+    // Captain search state
+    const [captainEmail, setCaptainEmail] = useState('');
+    const [captainSearchLoading, setCaptainSearchLoading] = useState(false);
+    const [captainSearchError, setCaptainSearchError] = useState('');
+    const [selectedCaptain, setSelectedCaptain] = useState<{ _id: string; firstName: string; lastName: string; email: string; phone: string; profileImage?: string } | null>(null);
+
+    // Edit captain state
+    const [editCaptainEmail, setEditCaptainEmail] = useState('');
+    const [editCaptainSearchLoading, setEditCaptainSearchLoading] = useState(false);
+    const [editCaptainSearchError, setEditCaptainSearchError] = useState('');
+    const [editSelectedCaptain, setEditSelectedCaptain] = useState<{ _id: string; firstName: string; lastName: string; email: string } | null>(null);
+
     const [editingTeamId, setEditingTeamId] = useState<string | null>(null);
     const [editTeamData, setEditTeamData] = useState({
         name: '', logo: '', primaryColor: '', secondaryColor: '',
@@ -33,6 +45,38 @@ const TeamsSection: React.FC<TeamsSectionProps> = ({ tournamentId, defaultBudget
         dispatch(fetchTournamentTeams(tournamentId));
         return () => { dispatch(clearTeams()); };
     }, [dispatch, tournamentId]);
+
+    const handleSearchCaptain = async (email: string, isEdit = false) => {
+        if (!email.trim()) return;
+        if (isEdit) {
+            setEditCaptainSearchLoading(true);
+            setEditCaptainSearchError('');
+        } else {
+            setCaptainSearchLoading(true);
+            setCaptainSearchError('');
+        }
+
+        const result = await dispatch(searchPlayerByEmail(email.trim()));
+        if (searchPlayerByEmail.fulfilled.match(result)) {
+            if (isEdit) {
+                setEditSelectedCaptain(result.payload);
+                setEditCaptainSearchLoading(false);
+            } else {
+                setSelectedCaptain(result.payload);
+                setCaptainSearchLoading(false);
+            }
+        } else {
+            if (isEdit) {
+                setEditCaptainSearchError(result.payload as string || 'Player not found');
+                setEditSelectedCaptain(null);
+                setEditCaptainSearchLoading(false);
+            } else {
+                setCaptainSearchError(result.payload as string || 'Player not found');
+                setSelectedCaptain(null);
+                setCaptainSearchLoading(false);
+            }
+        }
+    };
 
     const handleCreateTeam = async () => {
         if (!formData.name.trim() || !formData.ownerName.trim() || !formData.ownerPhone.trim()) return;
@@ -46,6 +90,7 @@ const TeamsSection: React.FC<TeamsSectionProps> = ({ tournamentId, defaultBudget
                 whatsappGroupLink: formData.whatsappGroupLink,
                 initialBudget: formData.initialBudget,
                 budget: formData.initialBudget,
+                ...(selectedCaptain ? { captainId: selectedCaptain._id } : {}),
             }
         };
 
@@ -57,6 +102,9 @@ const TeamsSection: React.FC<TeamsSectionProps> = ({ tournamentId, defaultBudget
                 ownerName: '', ownerPhone: '', ownerEmail: '', whatsappGroupLink: '',
                 initialBudget: defaultBudget,
             });
+            setSelectedCaptain(null);
+            setCaptainEmail('');
+            setCaptainSearchError('');
         }
     };
 
@@ -66,12 +114,20 @@ const TeamsSection: React.FC<TeamsSectionProps> = ({ tournamentId, defaultBudget
         const team = teams.find(t => t._id === id);
         if (!team) return;
 
-        const payload = {
+        const payload: any = {
             name: editTeamData.name, logo: editTeamData.logo,
             primaryColor: editTeamData.primaryColor, secondaryColor: editTeamData.secondaryColor,
             owner: { name: editTeamData.ownerName, phone: editTeamData.ownerPhone, email: editTeamData.ownerEmail },
             whatsappGroupLink: editTeamData.whatsappGroupLink,
         };
+
+        // Include captain if changed
+        if (editSelectedCaptain) {
+            payload.captainId = editSelectedCaptain._id;
+        } else if (team.captainId && !editSelectedCaptain) {
+            // Captain was removed - send null to clear
+            payload.captainId = null;
+        }
 
         await dispatch(updateTeam({ id, data: payload }));
 
@@ -81,6 +137,9 @@ const TeamsSection: React.FC<TeamsSectionProps> = ({ tournamentId, defaultBudget
         }
 
         setEditingTeamId(null);
+        setEditSelectedCaptain(null);
+        setEditCaptainEmail('');
+        setEditCaptainSearchError('');
     };
 
     const handleDelete = async (id: string) => {
@@ -104,6 +163,9 @@ const TeamsSection: React.FC<TeamsSectionProps> = ({ tournamentId, defaultBudget
             whatsappGroupLink: team.whatsappGroupLink || '',
             budget: team.budget || 0,
         });
+        setEditSelectedCaptain(null);
+        setEditCaptainEmail('');
+        setEditCaptainSearchError('');
     };
 
     return (
@@ -176,6 +238,58 @@ const TeamsSection: React.FC<TeamsSectionProps> = ({ tournamentId, defaultBudget
                         </div>
                     </div>
 
+                    {/* Captain Selection (Optional) */}
+                    <div className="mt-2 p-4 bg-white/5 rounded-xl border border-white/10">
+                        <div className="flex items-center gap-2 mb-3">
+                            <Shield className="h-4 w-4 text-amber-400" />
+                            <h4 className="text-sm font-medium text-white">Captain (Optional)</h4>
+                            <span className="text-[10px] text-gray-500 ml-1">Captain will be auto-assigned to this team and excluded from auction</span>
+                        </div>
+
+                        {selectedCaptain ? (
+                            <div className="flex items-center justify-between bg-black/40 rounded-lg p-3">
+                                <div className="flex items-center gap-3">
+                                    {selectedCaptain.profileImage ? (
+                                        <img src={selectedCaptain.profileImage} alt="" className="w-8 h-8 rounded-full object-cover" />
+                                    ) : (
+                                        <div className="w-8 h-8 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 text-xs font-bold">
+                                            {selectedCaptain.firstName[0]}{selectedCaptain.lastName[0]}
+                                        </div>
+                                    )}
+                                    <div>
+                                        <p className="text-sm font-medium text-white">{selectedCaptain.firstName} {selectedCaptain.lastName}</p>
+                                        <p className="text-xs text-gray-400">{selectedCaptain.email}</p>
+                                    </div>
+                                </div>
+                                <button onClick={() => { setSelectedCaptain(null); setCaptainEmail(''); }} className="p-1 hover:bg-white/10 rounded text-gray-400 hover:text-red-400">
+                                    <XCircle className="h-4 w-4" />
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="flex gap-2">
+                                <Input
+                                    type="email"
+                                    value={captainEmail}
+                                    onChange={e => { setCaptainEmail(e.target.value); setCaptainSearchError(''); }}
+                                    onKeyDown={e => e.key === 'Enter' && handleSearchCaptain(captainEmail)}
+                                    placeholder="Search player by email..."
+                                    className="bg-black/50 border-white/10 text-white flex-1"
+                                />
+                                <button
+                                    onClick={() => handleSearchCaptain(captainEmail)}
+                                    disabled={captainSearchLoading || !captainEmail.trim()}
+                                    className="px-4 py-2 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-400 font-medium transition-colors text-sm disabled:opacity-50 flex items-center gap-2"
+                                >
+                                    {captainSearchLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                                    Search
+                                </button>
+                            </div>
+                        )}
+                        {captainSearchError && (
+                            <p className="text-xs text-red-400 mt-2">{captainSearchError}</p>
+                        )}
+                    </div>
+
                     <div className="flex gap-3 justify-end mt-4 pt-4 border-t border-white/5">
                         <button onClick={() => setIsAdding(false)} className="px-6 py-2 rounded-lg border border-white/20 text-white hover:bg-white/10 transition-colors">
                             Cancel
@@ -213,6 +327,36 @@ const TeamsSection: React.FC<TeamsSectionProps> = ({ tournamentId, defaultBudget
                                             <Input type="color" value={editTeamData.secondaryColor} onChange={e => setEditTeamData(p => ({ ...p, secondaryColor: e.target.value }))} className="bg-black/50 border-white/10 p-0.5 w-8 h-8" title="Secondary Color" />
                                         </div>
                                     </div>
+                                    {/* Captain in Edit */}
+                                    <div className="mt-2 p-3 bg-white/5 rounded-lg border border-white/10">
+                                        <div className="flex items-center gap-1.5 mb-2">
+                                            <Shield className="h-3 w-3 text-amber-400" />
+                                            <span className="text-[11px] font-medium text-gray-300">Captain (Optional)</span>
+                                        </div>
+                                        {editSelectedCaptain ? (
+                                            <div className="flex items-center justify-between bg-black/40 rounded p-2">
+                                                <span className="text-xs text-white">{editSelectedCaptain.firstName} {editSelectedCaptain.lastName} ({editSelectedCaptain.email})</span>
+                                                <button onClick={() => { setEditSelectedCaptain(null); setEditCaptainEmail(''); }} className="text-gray-400 hover:text-red-400"><XCircle className="h-3.5 w-3.5" /></button>
+                                            </div>
+                                        ) : (
+                                            <div className="flex gap-1.5">
+                                                <Input
+                                                    type="email"
+                                                    value={editCaptainEmail}
+                                                    onChange={e => { setEditCaptainEmail(e.target.value); setEditCaptainSearchError(''); }}
+                                                    onKeyDown={e => e.key === 'Enter' && handleSearchCaptain(editCaptainEmail, true)}
+                                                    placeholder="Search by email..."
+                                                    className="bg-black/50 border-white/10 text-white h-7 text-xs flex-1"
+                                                />
+                                                <button onClick={() => handleSearchCaptain(editCaptainEmail, true)} disabled={editCaptainSearchLoading || !editCaptainEmail.trim()} className="px-2 py-1 rounded bg-amber-500/20 text-amber-400 text-xs disabled:opacity-50">
+                                                    {editCaptainSearchLoading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Search className="h-3 w-3" />}
+                                                </button>
+                                            </div>
+                                        )}
+                                        {editCaptainSearchError && <p className="text-[10px] text-red-400 mt-1">{editCaptainSearchError}</p>}
+                                        {team.captainId && !editSelectedCaptain && <p className="text-[10px] text-gray-500 mt-1">Current captain will be removed if saved without selecting a new one</p>}
+                                    </div>
+
                                     <div className="flex gap-2 mt-2">
                                         <button onClick={() => setEditingTeamId(null)} className="flex-1 py-1.5 rounded bg-white/10 hover:bg-white/20 text-xs font-medium">Cancel</button>
                                         <button onClick={() => handleUpdateTeam(team._id)} className="flex-1 py-1.5 rounded bg-primary hover:bg-primary/90 text-white text-xs font-medium">Save</button>
@@ -243,6 +387,7 @@ const TeamsSection: React.FC<TeamsSectionProps> = ({ tournamentId, defaultBudget
                                     <div className="flex flex-wrap gap-x-4 gap-y-2 text-xs text-gray-400">
                                         {team.owner.phone && <div className="flex items-center gap-1"><Phone className="h-3 w-3" /> {team.owner.phone}</div>}
                                         {team.owner.email && <div className="flex items-center gap-1"><Mail className="h-3 w-3" /> {team.owner.email}</div>}
+                                        {team.captainId && <div className="flex items-center gap-1 text-amber-400"><Shield className="h-3 w-3" /> Captain assigned</div>}
                                         {team.whatsappGroupLink && (
                                             <a href={team.whatsappGroupLink} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1 text-green-400 hover:underline">
                                                 <Smartphone className="h-3 w-3" /> WhatsApp Group <ExternalLink className="h-2.5 w-2.5" />

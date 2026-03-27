@@ -226,7 +226,7 @@ export const uploadOrganizerProfileImage = createAsyncThunk(
 // Profile Update
 export const updateProfile = createAsyncThunk(
     'auth/updateProfile',
-    async ({ role, data }: { role: Role; data: { firstName?: string; lastName?: string; phone?: string } }, { rejectWithValue }) => {
+    async ({ role, data }: { role: Role; data: { firstName?: string; lastName?: string; phone?: string; gender?: string; dateOfBirth?: string; sport?: string; location?: string } }, { rejectWithValue }) => {
         try {
             const response = await API.patch(`/${role}/auth/profile`, data);
             const responseData = response.data?.data?.data || response.data?.data;
