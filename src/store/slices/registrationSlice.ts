@@ -16,7 +16,15 @@ export interface Category {
     isPaidRegistration: boolean;
     registrationFee: number;
     status: 'draft' | 'registration_open' | 'registration_closed' | 'auction_in_progress' | 'ongoing' | 'completed';
-    bracketType?: 'knockout' | 'round_robin' | 'group_knockout';
+    bracketType?: 'knockout' | 'round_robin' | 'group_knockout' | 'league' | 'hybrid' | 'team_league';
+    teamLeagueConfig?: {
+        subTeamSlots: { slotNumber: number; matchType: string; label: string }[];
+        numberOfGroups: number;
+        topNPerGroup: number;
+        pointsForWin?: number;
+        pointsForLoss?: number;
+        pointsForDraw?: number;
+    };
     matchFormat?: string;
     isActive: boolean;
 }

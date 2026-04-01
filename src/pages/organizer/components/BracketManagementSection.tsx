@@ -250,7 +250,7 @@ const BracketManagementSection: React.FC<Props> = ({ tournamentId, categories })
                     {isSwapping ? (
                         <span className="text-cyan-300 flex items-center gap-2"><Loader2 className="h-3 w-3 animate-spin" /> Swapping...</span>
                     ) : !swapSelection ? (
-                        <span className="text-cyan-300">Click a player slot in <strong>Round 1</strong> (including bye slots) to select it, then click another to swap.</span>
+                        <span className="text-cyan-300">Click a player slot in any round to select it, then click another slot <strong>in the same round</strong> to swap.</span>
                     ) : (
                         <span className="text-cyan-300">
                             Selected: <strong className="text-cyan-100">{swapSelection.name}</strong> — now click another slot to swap.
@@ -464,8 +464,7 @@ const BracketMatchCard: React.FC<{
     const c2 = getC2(match, competitorType);
     const isBye = match.status === 'walkover' && match.winReason === 'bye';
     const isCompleted = match.status === 'completed' || (match.status === 'walkover' && !isBye);
-    const isR1 = (match.roundNumber || 0) === 1;
-    const canSwap = swapMode && isR1 && match.status !== 'completed';
+    const canSwap = swapMode && match.status !== 'completed';
     const canScore = !isCompleted && !isBye && !c1.isTBD && !c2.isTBD;
 
     const isSlotSelected = (slot: 'player1' | 'player2') =>

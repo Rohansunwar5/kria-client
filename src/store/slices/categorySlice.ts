@@ -20,15 +20,23 @@ export interface Category {
         pointsPerGame: number;
         tieBreakPoints?: number;
     };
-    bracketType: 'league' | 'knockout' | 'hybrid';
+    bracketType: 'league' | 'knockout' | 'hybrid' | 'team_league';
     hybridConfig?: {
         leagueSize: number;
         topN: number;
     };
+    teamLeagueConfig?: {
+        subTeamSlots: { slotNumber: number; matchType: 'singles' | 'doubles' | 'mixed_doubles'; label: string }[];
+        numberOfGroups: number;
+        topNPerGroup: number;
+        pointsForWin?: number;
+        pointsForLoss?: number;
+        pointsForDraw?: number;
+    };
     isPaidRegistration: boolean;
     registrationFee: number;
     maxRegistrations?: number;
-    status: 'setup' | 'registration' | 'auction' | 'bracket_configured' | 'ongoing' | 'completed';
+    status: 'setup' | 'registration' | 'auction' | 'groups_configured' | 'bracket_configured' | 'ongoing' | 'completed';
     isActive: boolean;
 }
 

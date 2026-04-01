@@ -19,6 +19,7 @@ const statusColors: Record<string, { bg: string; text: string; border: string; l
     setup: { bg: 'bg-gray-500/10', text: 'text-gray-400', border: 'border-gray-500/30', label: 'Setup' },
     registration: { bg: 'bg-green-500/10', text: 'text-green-500', border: 'border-green-500/30', label: 'Registration Open' },
     auction: { bg: 'bg-blue-500/10', text: 'text-blue-500', border: 'border-blue-500/30', label: 'Auctioning' },
+    groups_configured: { bg: 'bg-teal-500/10', text: 'text-teal-500', border: 'border-teal-500/30', label: 'Groups Configured' },
     bracket_configured: { bg: 'bg-purple-500/10', text: 'text-purple-500', border: 'border-purple-500/30', label: 'Bracket Generated' },
     ongoing: { bg: 'bg-primary/10', text: 'text-primary', border: 'border-primary/30', label: 'Ongoing' },
     completed: { bg: 'bg-emerald-500/10', text: 'text-emerald-500', border: 'border-emerald-500/30', label: 'Completed' },
@@ -42,6 +43,14 @@ export default function CategoriesSection({ tournamentId }: { tournamentId: stri
         matchFormat: { bestOf: 3, pointsPerGame: 21, tieBreakPoints: '' },
         bracketType: 'knockout',
         hybridConfig: { leagueSize: 4, topN: 2 },
+        teamLeagueConfig: {
+            subTeamSlots: [{ slotNumber: 1, matchType: 'singles', label: 'Singles 1' }],
+            numberOfGroups: 2,
+            topNPerGroup: 1,
+            pointsForWin: 2,
+            pointsForLoss: 0,
+            pointsForDraw: 1,
+        },
         isPaidRegistration: false,
         registrationFee: '',
         maxRegistrations: '',
@@ -95,6 +104,11 @@ export default function CategoriesSection({ tournamentId }: { tournamentId: stri
         // Clean up hybrid config
         if (payload.bracketType !== 'hybrid') {
             delete payload.hybridConfig;
+        }
+
+        // Clean up team league config
+        if (payload.bracketType !== 'team_league') {
+            delete payload.teamLeagueConfig;
         }
 
         // Clean up registration fee
@@ -154,6 +168,14 @@ export default function CategoriesSection({ tournamentId }: { tournamentId: stri
             hybridConfig: {
                 leagueSize: category.hybridConfig?.leagueSize || 4,
                 topN: category.hybridConfig?.topN || 2
+            },
+            teamLeagueConfig: {
+                subTeamSlots: category.teamLeagueConfig?.subTeamSlots || [{ slotNumber: 1, matchType: 'singles', label: 'Singles 1' }],
+                numberOfGroups: category.teamLeagueConfig?.numberOfGroups || 2,
+                topNPerGroup: category.teamLeagueConfig?.topNPerGroup || 1,
+                pointsForWin: category.teamLeagueConfig?.pointsForWin ?? 2,
+                pointsForLoss: category.teamLeagueConfig?.pointsForLoss ?? 0,
+                pointsForDraw: category.teamLeagueConfig?.pointsForDraw ?? 1,
             },
             isPaidRegistration: category.isPaidRegistration || false,
             registrationFee: category.registrationFee || '',
@@ -252,8 +274,14 @@ export default function CategoriesSection({ tournamentId }: { tournamentId: stri
 
                         {/* Match Settings */}
                         <div className="space-y-4 p-4 bg-white/5 border border-white/10 rounded-xl">
-                            <h4 className="text-sm font-semibold text-primary uppercase tracking-wider mb-2">Match Settings</h4>
+                            <h4 className="text-sm font-semibold text-primary uppercase tracking-wider mb-2">
+                                {formData.bracketType === 'team_league' ? 'Sub-Match Settings' : 'Match Settings'}
+                            </h4>
+                            {formData.bracketType === 'team_league' && (
+                                <p className="text-xs text-gray-500 -mt-1">Applies to every sub-match within a tie (each slot uses its own match type defined below).</p>
+                            )}
                             <div className="grid grid-cols-2 gap-4">
+                                {formData.bracketType !== 'team_league' && (
                                 <div className="space-y-2 col-span-2">
                                     <Label className="text-gray-400">Match Type *</Label>
                                     <select name="matchType" value={formData.matchType} onChange={handleInputChange} className="flex h-10 w-full rounded-md border border-white/10 bg-black/50 px-3 py-2 text-sm text-white">
@@ -261,6 +289,7 @@ export default function CategoriesSection({ tournamentId }: { tournamentId: stri
                                         <option value="doubles">Doubles</option>
                                     </select>
                                 </div>
+                                )}
                                 <div className="space-y-2">
                                     <Label className="text-gray-400">Best Of</Label>
                                     <select name="matchFormat.bestOf" value={formData.matchFormat.bestOf} onChange={handleInputChange} className="flex h-10 w-full rounded-md border border-white/10 bg-black/50 px-3 py-2 text-sm text-white">
@@ -286,6 +315,7 @@ export default function CategoriesSection({ tournamentId }: { tournamentId: stri
                                         <option value="knockout">Knockout</option>
                                         <option value="league">League</option>
                                         <option value="hybrid">Hybrid (Group + Knockout)</option>
+                                        <option value="team_league">Team League</option>
                                     </select>
                                 </div>
 
@@ -302,6 +332,94 @@ export default function CategoriesSection({ tournamentId }: { tournamentId: stri
                                     </>
                                 )}
                             </div>
+
+                            {formData.bracketType === 'team_league' && (
+                                <div className="mt-4 space-y-4 animate-in fade-in">
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div className="space-y-2">
+                                            <Label className="text-gray-400">Number of Groups</Label>
+                                            <Input name="teamLeagueConfig.numberOfGroups" type="number" min="1" value={formData.teamLeagueConfig.numberOfGroups} onChange={handleInputChange} className="bg-black/50 border-white/10 text-white" />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label className="text-gray-400">Top N Per Group</Label>
+                                            <Input name="teamLeagueConfig.topNPerGroup" type="number" min="1" value={formData.teamLeagueConfig.topNPerGroup} onChange={handleInputChange} className="bg-black/50 border-white/10 text-white" />
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div className="space-y-2">
+                                            <Label className="text-gray-400">Points for Win</Label>
+                                            <Input name="teamLeagueConfig.pointsForWin" type="number" min="0" value={formData.teamLeagueConfig.pointsForWin} onChange={handleInputChange} className="bg-black/50 border-white/10 text-white" />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label className="text-gray-400">Points for Loss</Label>
+                                            <Input name="teamLeagueConfig.pointsForLoss" type="number" min="0" value={formData.teamLeagueConfig.pointsForLoss} onChange={handleInputChange} className="bg-black/50 border-white/10 text-white" />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label className="text-gray-400">Points for Draw</Label>
+                                            <Input name="teamLeagueConfig.pointsForDraw" type="number" min="0" value={formData.teamLeagueConfig.pointsForDraw} onChange={handleInputChange} className="bg-black/50 border-white/10 text-white" />
+                                        </div>
+                                    </div>
+
+                                    <div className="space-y-3">
+                                        <div className="flex items-center justify-between">
+                                            <Label className="text-gray-400">Sub-Team Slots (Match Template)</Label>
+                                            <button
+                                                type="button"
+                                                onClick={() => {
+                                                    const slots = [...formData.teamLeagueConfig.subTeamSlots];
+                                                    slots.push({ slotNumber: slots.length + 1, matchType: 'singles', label: `Singles ${slots.length + 1}` });
+                                                    setFormData(prev => ({ ...prev, teamLeagueConfig: { ...prev.teamLeagueConfig, subTeamSlots: slots } }));
+                                                }}
+                                                className="flex items-center gap-1 px-3 py-1 text-xs bg-primary/20 text-primary hover:bg-primary/30 rounded-full"
+                                            >
+                                                <Plus className="h-3 w-3" /> Add Slot
+                                            </button>
+                                        </div>
+                                        {formData.teamLeagueConfig.subTeamSlots.map((slot: any, idx: number) => (
+                                            <div key={idx} className="flex items-center gap-3 p-3 bg-black/30 rounded-lg border border-white/5">
+                                                <span className="text-xs text-gray-500 font-mono w-6">#{slot.slotNumber}</span>
+                                                <select
+                                                    value={slot.matchType}
+                                                    onChange={(e) => {
+                                                        const slots = [...formData.teamLeagueConfig.subTeamSlots];
+                                                        const mt = e.target.value;
+                                                        const defaultLabel = mt === 'singles' ? `Singles ${idx + 1}` : mt === 'doubles' ? `Doubles ${idx + 1}` : `Mixed Doubles ${idx + 1}`;
+                                                        slots[idx] = { ...slots[idx], matchType: mt, label: defaultLabel };
+                                                        setFormData(prev => ({ ...prev, teamLeagueConfig: { ...prev.teamLeagueConfig, subTeamSlots: slots } }));
+                                                    }}
+                                                    className="flex h-9 rounded-md border border-white/10 bg-black/50 px-2 py-1 text-sm text-white flex-1"
+                                                >
+                                                    <option value="singles">Singles</option>
+                                                    <option value="doubles">Doubles</option>
+                                                    <option value="mixed_doubles">Mixed Doubles</option>
+                                                </select>
+                                                <Input
+                                                    value={slot.label}
+                                                    onChange={(e) => {
+                                                        const slots = [...formData.teamLeagueConfig.subTeamSlots];
+                                                        slots[idx] = { ...slots[idx], label: e.target.value };
+                                                        setFormData(prev => ({ ...prev, teamLeagueConfig: { ...prev.teamLeagueConfig, subTeamSlots: slots } }));
+                                                    }}
+                                                    placeholder="Label"
+                                                    className="bg-black/50 border-white/10 text-white flex-1 h-9"
+                                                />
+                                                {formData.teamLeagueConfig.subTeamSlots.length > 1 && (
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const slots = formData.teamLeagueConfig.subTeamSlots.filter((_: any, i: number) => i !== idx).map((s: any, i: number) => ({ ...s, slotNumber: i + 1 }));
+                                                            setFormData(prev => ({ ...prev, teamLeagueConfig: { ...prev.teamLeagueConfig, subTeamSlots: slots } }));
+                                                        }}
+                                                        className="p-1.5 text-red-400 hover:text-red-500 hover:bg-red-500/10 rounded"
+                                                    >
+                                                        <Trash2 className="h-3.5 w-3.5" />
+                                                    </button>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {/* Registration Limits */}
@@ -399,7 +517,7 @@ export default function CategoriesSection({ tournamentId }: { tournamentId: stri
                                             <span>•</span>
                                             <span className="capitalize">{category.matchType}</span>
                                             <span>•</span>
-                                            <span className="capitalize">{category.bracketType}</span>
+                                            <span className="capitalize">{category.bracketType === 'team_league' ? 'Team League' : category.bracketType}</span>
                                         </div>
                                     </div>
                                     <span className={`px-2 py-1 text-[10px] uppercase font-bold tracking-wider rounded border ${status.bg} ${status.text} ${status.border} whitespace-nowrap ml-2`}>

@@ -10,9 +10,6 @@ import { useAppDispatch, useAppSelector } from '../store/hooks';
 import { logout, updateProfile, fetchPlayerStats, uploadPlayerProfileImage } from '../store/slices/authSlice';
 import { fetchMyRegistrations, withdrawRegistration, fetchPlayerTournamentHistory, TournamentHistoryEntry } from '../store/slices/registrationSlice';
 import { Badge } from '@/components/ui/badge';
-import { Calendar } from '@/components/ui/calendar';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { format, parse } from 'date-fns';
 import { getMyPayments } from '@/api/payment';
 
 // ─── Dashboard card ──────────────────────────────────────────────────────────
@@ -236,34 +233,10 @@ const PlayerProfilePage = () => {
                                     <option value="male">Male</option>
                                     <option value="female">Female</option>
                                 </select>
-                                <Popover>
-                                    <PopoverTrigger asChild>
-                                        <button
-                                            type="button"
-                                            className="w-full px-4 py-2.5 rounded-full bg-black/50 border border-white/10 text-white text-center focus:outline-none focus:border-primary text-sm hover:bg-black/70 transition-colors"
-                                        >
-                                            {editData.dateOfBirth
-                                                ? format(parse(editData.dateOfBirth, 'yyyy-MM-dd', new Date()), 'dd MMM yyyy')
-                                                : <span className="text-gray-500">Select Date of Birth</span>}
-                                        </button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-auto p-0" align="center">
-                                        <Calendar
-                                            mode="single"
-                                            selected={editData.dateOfBirth ? parse(editData.dateOfBirth, 'yyyy-MM-dd', new Date()) : undefined}
-                                            onSelect={(date) => {
-                                                if (date) {
-                                                    setEditData(p => ({ ...p, dateOfBirth: format(date, 'yyyy-MM-dd') }));
-                                                }
-                                            }}
-                                            disabled={(date) => date > new Date()}
-                                            defaultMonth={editData.dateOfBirth ? parse(editData.dateOfBirth, 'yyyy-MM-dd', new Date()) : new Date(2000, 0)}
-                                            captionLayout="dropdown-buttons"
-                                            fromYear={1950}
-                                            toYear={new Date().getFullYear()}
-                                        />
-                                    </PopoverContent>
-                                </Popover>
+                                <DOBPicker
+                                    value={editData.dateOfBirth}
+                                    onChange={val => setEditData(p => ({ ...p, dateOfBirth: val }))}
+                                />
                                 {[
                                     { key: 'sport',    placeholder: 'Sport (e.g. Badminton)' },
                                     { key: 'location', placeholder: 'Location (e.g. Bangalore)' },
@@ -656,5 +629,95 @@ const EmptyState = ({ icon: Icon, message, cta, onCta }: { icon: any; message: s
         </button>
     </div>
 );
+
+// ─── Date of Birth Picker ──────────────────────────────────────────────────────
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+const selectCls = 'flex-1 px-3 py-2.5 rounded-full bg-black/50 border border-white/10 text-white text-sm text-center focus:outline-none focus:border-primary transition-colors appearance-none cursor-pointer hover:bg-black/70';
+
+const DOBPicker = ({ value, onChange }: { value: string; onChange: (v: string) => void }) => {
+    const currentYear = new Date().getFullYear();
+    const years = Array.from({ length: currentYear - 1949 }, (_, i) => currentYear - i);
+
+    const [day, month, year] = React.useMemo(() => {
+        if (!value) return ['', '', ''];
+        const [y, m, d] = value.split('-');
+        return [d || '', m || '', y || ''];
+    }, [value]);
+
+    const daysInMonth = React.useMemo(() => {
+        if (!month || !year) return 31;
+        return new Date(parseInt(year), parseInt(month), 0).getDate();
+    }, [month, year]);
+
+    const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+    const update = (d: string, m: string, y: string) => {
+        if (d && m && y) {
+            const maxDay = new Date(parseInt(y), parseInt(m), 0).getDate();
+            const safeDay = Math.min(parseInt(d), maxDay).toString().padStart(2, '0');
+            onChange(`${y}-${m.padStart(2, '0')}-${safeDay}`);
+        } else {
+            onChange('');
+        }
+    };
+
+    return (
+        <div className="flex flex-col gap-1.5 w-full">
+            <span className="text-xs text-gray-500 text-center tracking-wide uppercase font-medium">Date of Birth</span>
+            <div className="flex gap-2 w-full">
+                {/* Day */}
+                <select
+                    value={day}
+                    onChange={e => update(e.target.value, month, year)}
+                    className={selectCls}
+                    style={{ WebkitAppearance: 'none' }}
+                >
+                    <option value="" disabled>Day</option>
+                    {days.map(d => (
+                        <option key={d} value={String(d).padStart(2, '0')} className="bg-zinc-900">
+                            {d}
+                        </option>
+                    ))}
+                </select>
+
+                {/* Month */}
+                <select
+                    value={month}
+                    onChange={e => update(day, e.target.value, year)}
+                    className={selectCls}
+                    style={{ WebkitAppearance: 'none', flex: '1.6' }}
+                >
+                    <option value="" disabled>Month</option>
+                    {MONTHS.map((m, i) => (
+                        <option key={m} value={String(i + 1).padStart(2, '0')} className="bg-zinc-900">
+                            {m}
+                        </option>
+                    ))}
+                </select>
+
+                {/* Year */}
+                <select
+                    value={year}
+                    onChange={e => update(day, month, e.target.value)}
+                    className={selectCls}
+                    style={{ WebkitAppearance: 'none', flex: '1.3' }}
+                >
+                    <option value="" disabled>Year</option>
+                    {years.map(y => (
+                        <option key={y} value={String(y)} className="bg-zinc-900">
+                            {y}
+                        </option>
+                    ))}
+                </select>
+            </div>
+            {day && month && year && (
+                <p className="text-xs text-primary/70 text-center mt-0.5">
+                    {parseInt(day)} {MONTHS[parseInt(month) - 1]} {year}
+                </p>
+            )}
+        </div>
+    );
+};
 
 export default PlayerProfilePage;

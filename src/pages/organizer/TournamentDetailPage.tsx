@@ -24,6 +24,7 @@ import RegistrationsSection from './components/RegistrationsSection';
 import AuctionSection from './components/AuctionSection';
 import MatchManagementSection from './components/MatchManagementSection';
 import BracketManagementSection from './components/BracketManagementSection';
+import TeamLeagueSection from './components/TeamLeagueSection';
 import PaymentsSection from './components/PaymentsSection';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -43,6 +44,7 @@ type SectionKey =
     | 'auction'
     | 'brackets'
     | 'matches'
+    | 'team_league'
     | 'staff'
     | 'danger';
 
@@ -109,6 +111,7 @@ const NAV_GROUPS: NavGroup[] = [
         items: [
             { key: 'brackets', label: 'Brackets', icon: Target },
             { key: 'matches', label: 'Matches', icon: Swords },
+            { key: 'team_league', label: 'Team League', icon: Trophy },
         ],
     },
     {
@@ -469,6 +472,7 @@ const TournamentDetailPage = () => {
             case 'auction': return currentTournament && id ? <AuctionSection tournamentId={id} categories={categories.map(c => ({ _id: c._id, name: c.name, status: c.status }))} /> : null;
             case 'brackets': return currentTournament && id ? <BracketManagementSection tournamentId={id} categories={categories.map(c => ({ _id: c._id, name: c.name, status: c.status }))} /> : null;
             case 'matches': return currentTournament && id ? <MatchManagementSection tournamentId={id} categories={categories.map(c => ({ _id: c._id, name: c.name, status: c.status }))} /> : null;
+            case 'team_league': return currentTournament && id ? <TeamLeagueSection tournamentId={id} categories={categories.map(c => ({ _id: c._id, name: c.name, status: c.status, bracketType: c.bracketType, teamLeagueConfig: c.teamLeagueConfig }))} /> : null;
             case 'staff': return currentTournament && id ? <StaffSection tournamentId={id} staffIds={currentTournament.staffIds || []} /> : null;
             case 'danger': return <DangerSection />;
             default: return null;

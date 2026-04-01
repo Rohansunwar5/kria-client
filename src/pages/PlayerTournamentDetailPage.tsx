@@ -18,12 +18,13 @@ import PlayersTab from './player-tournament/PlayersTab';
 import TeamsTab from './player-tournament/TeamsTab';
 import AuctionTab from './player-tournament/AuctionTab';
 import BracketTab from './player-tournament/BracketTab';
+import TeamLeagueTab from './player-tournament/TeamLeagueTab';
 import LeaderboardTab from './player-tournament/LeaderboardTab';
 import AwardsTab from './player-tournament/AwardsTab';
 
-type TabKey = 'overview' | 'categories' | 'players' | 'teams' | 'auction' | 'bracket' | 'leaderboard' | 'awards';
+type TabKey = 'overview' | 'categories' | 'players' | 'teams' | 'auction' | 'bracket' | 'team_league' | 'leaderboard' | 'awards';
 
-const TABS: TabKey[] = ['overview', 'categories', 'players', 'teams', 'auction', 'bracket', 'leaderboard', 'awards'];
+const TABS: TabKey[] = ['overview', 'categories', 'players', 'teams', 'auction', 'bracket', 'team_league', 'leaderboard', 'awards'];
 
 const PlayerTournamentDetailPage = () => {
     const { id } = useParams<{ id: string }>();
@@ -122,6 +123,17 @@ const PlayerTournamentDetailPage = () => {
         if (selectedCategory?.isPaidRegistration) {
             setPaymentLoading(true);
             try {
+                // Load Razorpay script on-demand if not already loaded
+                if (!(window as any).Razorpay) {
+                    await new Promise<void>((resolve, reject) => {
+                        const s = document.createElement('script');
+                        s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+                        s.onload = () => resolve();
+                        s.onerror = () => reject(new Error('Failed to load Razorpay'));
+                        document.head.appendChild(s);
+                    });
+                }
+
                 const order = await createPaymentOrder({
                     tournamentId: tournament._id,
                     categoryId: registeringCategoryId,
@@ -268,15 +280,23 @@ const PlayerTournamentDetailPage = () => {
                         <div className="flex-1 flex flex-col gap-8">
                             {/* Tab Bar */}
                             <div className="flex gap-2 p-1.5 bg-white/5 border border-white/10 rounded-2xl w-fit overflow-x-auto max-w-full no-scrollbar">
-                                {TABS.map(tab => (
-                                    <button
-                                        key={tab}
-                                        onClick={() => setActiveTab(tab)}
-                                        className={`px-6 py-2.5 rounded-xl capitalize font-medium text-sm transition-all focus:outline-none whitespace-nowrap ${activeTab === tab ? 'bg-white/10 text-white shadow-sm' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
-                                    >
-                                        {tab}
-                                    </button>
-                                ))}
+                                {TABS
+                                    .filter(tab => {
+                                        if (tab === 'team_league') return categories.some(c => c.bracketType === 'team_league');
+                                        return true;
+                                    })
+                                    .map(tab => {
+                                        const label = tab === 'team_league' ? 'Team League' : tab;
+                                        return (
+                                            <button
+                                                key={tab}
+                                                onClick={() => setActiveTab(tab)}
+                                                className={`px-6 py-2.5 rounded-xl capitalize font-medium text-sm transition-all focus:outline-none whitespace-nowrap ${activeTab === tab ? 'bg-white/10 text-white shadow-sm' : 'text-gray-400 hover:text-white hover:bg-white/5'}`}
+                                            >
+                                                {label}
+                                            </button>
+                                        );
+                                    })}
                             </div>
 
                             {/* Tab Content */}
@@ -324,6 +344,12 @@ const PlayerTournamentDetailPage = () => {
                             )}
                             {activeTab === 'bracket' && id && (
                                 <BracketTab
+                                    categories={categories}
+                                    tournamentId={id}
+                                />
+                            )}
+                            {activeTab === 'team_league' && id && (
+                                <TeamLeagueTab
                                     categories={categories}
                                     tournamentId={id}
                                 />

@@ -100,7 +100,7 @@ export const updateTeamBudget = createAsyncThunk(
     'team/updateTeamBudget',
     async ({ id, amount }: { id: string; amount: number }, { rejectWithValue }) => {
         try {
-            const response = await API.put(`/teams/${id}/budget`, { amount });
+            const response = await API.put(`/teams/${id}/budget`, { budget: amount });
             const data = response.data?.data?.data || response.data?.data;
             return data;
         } catch (error) {
